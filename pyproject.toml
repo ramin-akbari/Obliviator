@@ -1,13 +1,19 @@
 [project]
 name = "obliviator"
 version = "0.1.0"
-description = "Add your description here"
+description = "A package for running Concept Erasure methods"
 readme = "README.md"
 authors = [
     { name = "Ramin Akbari", email = "akbarigh@msu.edu" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "hydra-core>=1.3.2",
+    "numpy>=2.4.2",
+    "scipy>=1.17.0",
+    "torch>=2.10.0",
+    "tqdm>=4.67.3",
+]
 
 [build-system]
 requires = ["uv_build>=0.9.25,<0.10.0"]
