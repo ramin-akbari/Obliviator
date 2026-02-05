@@ -3,25 +3,6 @@ import torch
 from torch.utils.data import Dataset
 
 
-class ClassficationDataset(Dataset):
-    def __init__(
-        self,
-        x: torch.Tensor | np.ndarray,
-        y: torch.Tensor | np.ndarray,
-        dtype: torch.dtype = torch.float32,
-    ) -> None:
-        super().__init__()
-        assert len(x) == len(y), "Inputs x and labels y must have the same length!"
-        self.x = torch.as_tensor(x, dtype=dtype)
-        self.y = torch.as_tensor(y)
-
-    def __len__(self) -> int:
-        return self.x.shape[0]
-
-    def __getitem__(self, idx) -> tuple[torch.Tensor, torch.Tensor]:
-        return self.x[idx], self.y[idx]
-
-
 class UnsupervisedDataset(Dataset):
     def __init__(
         self,

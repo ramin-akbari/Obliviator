@@ -1,11 +1,10 @@
 from typing import Callable
 
+import numpy as np
 import torch
 import torch.nn as tnn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from tqdm import trange
-
-from .data import ClassficationDataset
 
 type ActFactory = Callable[[], tnn.Module]
 
@@ -27,6 +26,25 @@ def mlp_factory(
         net.append(tnn.Linear(dim_hidden, dim_out))
 
     return tnn.Sequential(*net)
+
+
+class ClassficationDataset(Dataset):
+    def __init__(
+        self,
+        x: torch.Tensor | np.ndarray,
+        y: torch.Tensor | np.ndarray,
+        dtype: torch.dtype = torch.float32,
+    ) -> None:
+        super().__init__()
+        assert len(x) == len(y), "Inputs x and labels y must have the same length!"
+        self.x = torch.as_tensor(x, dtype=dtype)
+        self.y = torch.as_tensor(y)
+
+    def __len__(self) -> int:
+        return self.x.shape[0]
+
+    def __getitem__(self, idx) -> tuple[torch.Tensor, torch.Tensor]:
+        return self.x[idx], self.y[idx]
 
 
 class MLPCrossEntropy:
