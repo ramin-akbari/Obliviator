@@ -3,12 +3,13 @@ import torch
 
 class RandomFourierFeature:
     def __init__(
-        self, dim_x: int, dim_rff: int, sigma: float, device: torch.device
+        self, dim_x: int, dim_rff: int, sigma_rff: float, device: torch.device
     ) -> None:
         dim_rff = dim_rff // 2
+        self.sigma = sigma_rff
 
         def helper_weight_sampler() -> torch.Tensor:
-            return torch.randn(dim_x, dim_rff, device=device).div_(sigma)
+            return torch.randn(dim_x, dim_rff, device=device).div_(self.sigma)
 
         self.sampler = helper_weight_sampler
         self.sample_weights()
@@ -19,7 +20,9 @@ class RandomFourierFeature:
         rff = x @ self.w
         return torch.cat([rff.sin().mul_(self.c), rff.cos().mul_(self.c)], dim=1)
 
-    def sample_weights(self) -> None:
+    def sample_weights(self, sigma: None | float = None) -> None:
+        if sigma is not None:
+            self.sigma = sigma
         self.w = self.sampler()
 
 
@@ -35,4 +38,6 @@ def median_heuristic_sigma(x: torch.Tensor, max_sample: int = 5_000) -> torch.Te
         x = x[torch.randperm(x.shape[0])[:max_sample]]
 
     n = x.shape[0]
-    return torch.cdist(x, x)[*torch.triu_indices(n, n, offset=1)].median()
+    return torch.cdist(x, x)[
+        *torch.triu_indices(n, n, offset=1, device=x.device)
+    ].median()
