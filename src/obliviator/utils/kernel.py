@@ -18,7 +18,7 @@ class RandomFourierFeature:
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
         x = x.to(device=self.w.device)
         rff = x @ self.w
-        return torch.cat([rff.sin().mul_(self.c), rff.cos().mul_(self.c)], dim=1)
+        return torch.cat([rff.sin(), rff.cos()], dim=1).mul_(self.c)
 
     def sample_weights(self, sigma: None | float = None) -> None:
         if sigma is not None:
