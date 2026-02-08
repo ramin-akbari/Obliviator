@@ -1,10 +1,13 @@
+from dataclasses import field
+
 import numpy as np
 import torch
 import torch.nn as tnn
 from torch.utils.data import DataLoader, Dataset
 from tqdm import trange
 
-from obliviator.utils.misc import ActFactory, mlp_factory
+from obliviator.schemas import MLPConfig, OptimConfig
+from obliviator.utils.misc import mlp_factory, optim_factory
 
 
 class ClassficationDataset(Dataset):
@@ -34,33 +37,28 @@ class MLPCrossEntropy:
         x_test: torch.Tensor,
         y_test: torch.Tensor,
         device: torch.device,
-        dim_hidden: int,
-        n_layer: int,
-        activation: ActFactory = lambda: tnn.SiLU(inplace=True),
-        lr: float = 5e-3,
-        batch_size: int = 4096,
-        weight_decay: float = 1e-2,
         update_accuracy_interval: int = 40,
+        mlp_config: MLPConfig = field(default_factory=MLPConfig),
+        optim_config: OptimConfig = field(default_factory=OptimConfig),
     ) -> None:
         self.x_test = x_test.to(device=device)
         self.y_test = y_test.to(device=device)
         data = ClassficationDataset(x, y)
         self.loader = DataLoader(
             data,
-            batch_size=batch_size,
+            batch_size=OptimConfig.batch_size,
             shuffle=True,
             drop_last=True,
             num_workers=4,
             pin_memory=True,
         )
-        n_label = int(y.max().item()) + 1
-        self.net = mlp_factory(
-            x.shape[1], dim_hidden, n_layer, True, n_label, activation
-        )
+
+        mlp_config.input_dim = x.shape[0]
+        mlp_config.out_dim = int(y.max().item()) + 1
+
+        self.net = mlp_factory(mlp_config)
         self.loss = tnn.CrossEntropyLoss()
-        self.optimizer = torch.optim.AdamW(
-            self.net.parameters(), lr=lr, weight_decay=weight_decay
-        )
+        self.optimizer = optim_factory(optim_config)(self.net.parameters())
         self.acc_interval = update_accuracy_interval
         self.net.to(device=device)
         self.loss.to(device=device)

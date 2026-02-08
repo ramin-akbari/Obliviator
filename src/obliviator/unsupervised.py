@@ -1,11 +1,47 @@
 import numpy as np
 import torch
+from tqdm import trange
 
 from .base import Obliviator
+from .schemas import UnsupervisedConfig
+from .utils.dataloader import InitDataset
+from .utils.linalg import cross_cov, null_pca
 
 
 class Unsupervised(Obliviator):
     def __init__(
-        self, x: torch.Tensor | np.ndarray, s: torch.Tensor | np.ndarray
+        self,
+        x: torch.Tensor | np.ndarray,
+        s: torch.Tensor | np.ndarray,
+        x_test: torch.Tensor | np.ndarray,
+        config: UnsupervisedConfig,
+        device: torch.device,
+        dtype: torch.dtype = torch.float32,
     ) -> None:
-        super().__init__(x, s)
+        super().__init__(x, s, x_test, config, device, dtype)
+
+    def init_erasure(self, tol: float) -> None:
+        x = self.phi_x(self.x)
+        f = null_pca(x, self.s, tol)
+        mu = x.mean(dim=0)
+        self.x = x.sub_(mu).mm(f).cpu()
+        self.x_test = self.x_test.sub_(mu).mm(f)
+        self.update_encoder(f.shape[1], self.encoder_config.hidden_dim)
+
+    def _init_encoder(self, epochs: int) -> None:
+        data = self.loader(InitDataset(self.x, self.s))
+        pbar = trange(epochs)
+        optimizer = self.optim(self.encoder.parameters())
+        for _ in pbar:
+            for z, s in data:
+                optimizer.zero_grad()
+                z = z.to(self.device)
+                s = s.to(self.device)
+                sc_s = torch.cov(s.T).norm("fro").sqrt()
+                sc_z = torch.cov(z.T).norm("fro").sqrt()
+                w = self._loss_embeddings(z)
+                hs_s = cross_cov(w, s).norm("fro").div_(sc_s)
+                hs_z = cross_cov(z, s).norm("fro").div_(sc_z)
+                loss = hs_z.mul_(self.tau_z) - hs_s
+                loss.backward()
+                optimizer.step()
