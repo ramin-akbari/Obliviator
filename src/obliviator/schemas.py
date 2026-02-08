@@ -35,7 +35,7 @@ class MLPConfig:
 
 
 @dataclass
-class UnsupervisedConfig:
+class ErasureConfig:
     drff_min: int = 1000
     drff_max: int = 6000
 
@@ -43,8 +43,8 @@ class UnsupervisedConfig:
     sigma_min_x: float = 0.05
     sigma_min_z: float = 0.05
 
-    resamle_rff_weights_x: bool = False
-    resamle_rff_weights_z: bool = False
+    resample_x: bool = False
+    resample_z: bool = False
 
     use_rff_s: bool = False
     sigma_min_s: float = 0.1
@@ -56,13 +56,21 @@ class UnsupervisedConfig:
     evp_tau_z: float = 0.001
     evp_tau_x: float = 0.1
 
+    update_batch: int = 16384
+
     device: str = "cpu"
     optim_config: OptimConfig = field(default_factory=OptimConfig)
     encoder_config: MLPConfig = field(default_factory=MLPConfig)
 
 
 @dataclass
-class SupervisedConfig(UnsupervisedConfig):
+class UnsupervisedConfig(ErasureConfig):
+    init_erasure_epochs: int = 30
+    init_erasure_steps: int = 2
+
+
+@dataclass
+class SupervisedConfig(ErasureConfig):
     tau_y: float = 2.5
     evp_tau_y: float = 2.5
     use_rff_y: bool = False

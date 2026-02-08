@@ -11,8 +11,7 @@ class Supervised(Obliviator):
         x: torch.Tensor | np.ndarray,
         s: torch.Tensor | np.ndarray,
         x_test: torch.Tensor | np.ndarray,
-        encoder: torch.nn.Module,
         config: SupervisedConfig,
-        device: torch.device,
+        dtype: torch.dtype = torch.float32,
     ) -> None:
-        super().__init__(x, s, x_test, encoder, config, device)
+        super().__init__(x, s, x_test, config, dtype)

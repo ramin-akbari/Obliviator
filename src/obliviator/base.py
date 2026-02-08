@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from .schemas import UnsupervisedConfig
+from .schemas import ErasureConfig
 from .utils.linalg import RandomFourierFeature, median_heuristic_sigma
 from .utils.misc import mlp_factory, optim_factory
 
@@ -31,23 +31,23 @@ class Obliviator(ABC):
         x: torch.Tensor | np.ndarray,
         s: torch.Tensor | np.ndarray,
         x_test: torch.Tensor | np.ndarray,
-        config: UnsupervisedConfig,
-        device: torch.device,
+        config: ErasureConfig,
         dtype: torch.dtype = torch.float32,
     ) -> None:
 
         self.x = torch.as_tensor(x, dtype=dtype)
         self.s = torch.as_tensor(s, dtype=dtype)
-        self.x_test = torch.as_tensor(x_test, dtype=dtype, device=config.device)
+        self.x_test = torch.as_tensor(x_test, dtype=dtype)
         self.sigma_min = config.sigma_min
+        self.update_batch = config.update_batch
 
         self.tau_x = config.tau_x
         self.tau_z = config.tau_z
 
         self.encoder_config = config.encoder_config
-        self.encoder = mlp_factory(config.encoder_config)
-        self.optim = optim_factory(config.optim_config)
-        self.device = device
+        self.encoder = torch.nn.Identity()
+        self.optim_factory = optim_factory(config.optim_config)
+        self.device = torch.device(config.device)
         self.loader = partial(
             DataLoader,
             batch_size=config.optim_config.batch_size,
@@ -61,8 +61,8 @@ class Obliviator(ABC):
             self.x.shape[1],
             config.drff_min,
             config.drff_max,
-            device,
-            config.resamle_rff_weights_x,
+            self.device,
+            config.resample_x,
             median_heuristic_sigma(self.x, config.sigma_min_x),
         )
 
@@ -70,16 +70,16 @@ class Obliviator(ABC):
             config.encoder_config.out_dim,
             config.drff_min,
             config.drff_max,
-            device,
+            self.device,
             True,
         )
 
         if config.use_rff_s:
             phi_s = _rff_helper(
                 self.s.shape[1],
-                config.drff_min,
+                config.drff_label_min,
                 config.drff_max,
-                device,
+                self.device,
                 False,
                 median_heuristic_sigma(s, config.sigma_min_s),
             )
@@ -88,22 +88,29 @@ class Obliviator(ABC):
     def _loss_embeddings(self, z: torch.Tensor) -> torch.Tensor:
         w = self.encoder(z)
         w = w.div(w.norm(dim=1, keepdim=True))
-        self.phi.sigma = median_heuristic_sigma(w, self.sigma_min)
+        self.phi.change_sigma(median_heuristic_sigma(w, self.sigma_min))
         return self.phi(w)
 
     @torch.no_grad()
-    def get_embeddings(self, z: torch.Tensor) -> torch.Tensor:
-        embd = self.encoder(z)
-        return embd.div_(embd.norm(dim=1, keepdim=True))
+    def get_embeddings(self, z: torch.Tensor, batch: int) -> torch.Tensor:
+        def helper(x: torch.Tensor) -> torch.Tensor:
+            x = self.encoder(x.to(device=self.device, non_blocking=True))
+            return x.div_(x.norm(dim=1, keepdim=True)).cpu()
+
+        return torch.cat(
+            [helper(z_batched) for z_batched in torch.split(z, batch, dim=0)],
+            dim=0,
+        )
 
     def update_encoder(self, in_dim: int, out_dim: int) -> None:
         self.encoder_config.input_dim = in_dim
-        self.encoder_config.hidden_dim = out_dim
-        self.encoder = mlp_factory(self.encoder_config)
 
-    @abstractmethod
-    def _init_encoder(self, epochs: int) -> None:
-        pass
+        if out_dim != self.encoder_config.out_dim:
+            self.phi.change_input_dim(out_dim)
+            self.encoder_config.out_dim = out_dim
+            self.encoder_config.hidden_dim = out_dim
+
+        self.encoder = mlp_factory(self.encoder_config)
 
     @abstractmethod
     def init_erasure(self, tol: float) -> None:
