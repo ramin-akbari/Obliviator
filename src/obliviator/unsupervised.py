@@ -52,7 +52,9 @@ class Unsupervised(Obliviator):
 
         w = self.phi(w, self.matmul_batch)
         x = self.phi_x(self.x, self.matmul_batch)
-        f = null_supervised_pca(w, x, self.s, self.device, self.matmul_batch, rtol=tol)
+        f = null_supervised_pca(
+            w, (x,), (self.tau_x,), self.s, self.device, self.matmul_batch, rtol=tol
+        )
 
         self.z = batched_matmul(w, f, self.matmul_batch, self.device)
         self.x_test = batched_matmul(self.x_test, f, self.matmul_batch, self.device)

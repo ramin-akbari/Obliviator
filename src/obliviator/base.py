@@ -130,10 +130,7 @@ class Obliviator(ABC):
         pass
 
     @abstractmethod
-    def init_erasure(
-        self,
-        tol: float,
-    ) -> None:
+    def init_erasure(self, tol: float) -> None:
         pass
 
     @abstractmethod

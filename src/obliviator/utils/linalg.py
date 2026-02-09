@@ -1,3 +1,5 @@
+from functools import partial
+
 import torch
 from numpy import ndarray
 
@@ -62,7 +64,7 @@ def select_top_k_eigvec(x: torch.Tensor, rtol: float, atol: float) -> torch.Tens
     return eigvec[:, eigval > tol]
 
 
-def find_null_xs(
+def find_null_sx(
     x: torch.Tensor,
     s: torch.Tensor,
     device: torch.device,
@@ -84,21 +86,26 @@ def find_null_xs(
 
 def null_supervised_pca(
     x: torch.Tensor,
-    y: torch.Tensor,
+    rvs: tuple[torch.Tensor, ...],
+    taus: tuple[float, ...],
     s: torch.Tensor,
     device: torch.device,
     batch: int | None = None,
     rtol: float = 1e-5,
     atol: float = 1e-6,
 ) -> torch.Tensor:
-    u_null = find_null_xs(x, s, device, batch, rtol, atol)
+    u_null = find_null_sx(x, s, device, batch, rtol, atol)
+    mat = torch.zeros(u_null.shape[1], u_null.shape[1], device=device)
     if batch is None:
-        C = cross_cov(y, x)
+        helper = partial(cross_cov, y=x)
     else:
-        C = batched_cross_cov(x, y, batch, device)
-    C = C.mm(u_null)
-    C = u_null.T.mm(C)
-    pcs = select_top_k_eigvec(C, rtol, atol)
+        helper = partial(batched_cross_cov, y=x, device=device, batch=batch)
+
+    for tau, rv in zip(taus, rvs):
+        C = helper(rv).mm(u_null)
+        mat.addmm_(C.T, C, alpha=tau)
+
+    pcs = select_top_k_eigvec(mat, rtol, atol)
     return u_null.mm(pcs)
 
 
@@ -110,7 +117,7 @@ def null_pca(
     rtol: float = 1e-5,
     atol: float = 1e-6,
 ) -> torch.Tensor:
-    u_null = find_null_xs(x, s, device, batch, rtol, atol)
+    u_null = find_null_sx(x, s, device, batch, rtol, atol)
     if batch is None:
         C = torch.cov(x.T)
     else:
