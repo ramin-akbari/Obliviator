@@ -38,8 +38,13 @@ class Obliviator(ABC):
         self.x = torch.as_tensor(x, dtype=dtype)
         self.s = torch.as_tensor(s, dtype=dtype)
         self.x_test = torch.as_tensor(x_test, dtype=dtype)
+
         self.sigma_min = config.sigma_min
-        self.update_batch = config.update_batch
+        self.sigma_min_z = config.sigma_min_z
+        self.sigma_min_x = config.sigma_min_x
+
+        self.encoder_batch = config.encoder_batch
+        self.matmul_batch = config.matmul_batch
 
         self.tau_x = config.tau_x
         self.tau_z = config.tau_z
@@ -66,6 +71,14 @@ class Obliviator(ABC):
             median_heuristic_sigma(self.x, config.sigma_min_x),
         )
 
+        self.phi_z = _rff_helper(
+            config.encoder_config.out_dim,
+            config.drff_min,
+            config.drff_max,
+            self.device,
+            config.resample_z,
+        )
+
         self.phi = _rff_helper(
             config.encoder_config.out_dim,
             config.drff_min,
@@ -85,11 +98,11 @@ class Obliviator(ABC):
             )
             self.s = phi_s(self.s)
 
-    def _loss_embeddings(self, z: torch.Tensor) -> torch.Tensor:
-        w = self.encoder(z)
+    def _loss_embeddings(self, z_batch: torch.Tensor) -> torch.Tensor:
+        w = self.encoder(z_batch)
         w = w.div(w.norm(dim=1, keepdim=True))
         self.phi.change_sigma(median_heuristic_sigma(w, self.sigma_min))
-        return self.phi(w)
+        return self.phi(z_batch)
 
     @torch.no_grad()
     def get_embeddings(self, z: torch.Tensor, batch: int) -> torch.Tensor:
@@ -113,7 +126,14 @@ class Obliviator(ABC):
         self.encoder = mlp_factory(self.encoder_config)
 
     @abstractmethod
-    def init_erasure(self, tol: float) -> None:
+    def _init_dim_reduction(self, tol: float) -> None:
+        pass
+
+    @abstractmethod
+    def init_erasure(
+        self,
+        tol: float,
+    ) -> None:
         pass
 
     @abstractmethod

@@ -6,7 +6,13 @@ from typing_extensions import override
 from .base import Obliviator
 from .schemas import UnsupervisedConfig
 from .utils.dataloader import InitDataset
-from .utils.linalg import cross_cov, null_pca
+from .utils.linalg import (
+    batched_matmul,
+    cross_cov,
+    median_heuristic_sigma,
+    null_pca,
+    null_supervised_pca,
+)
 
 
 class Unsupervised(Obliviator):
@@ -22,16 +28,42 @@ class Unsupervised(Obliviator):
         self.init_erasure_epochs = config.init_erasure_epochs
         self.init_erasure_steps = config.init_erasure_steps
 
-    def init_erasure(self, tol: float) -> None:
-        x = self.phi_x(self.x)
-        f = null_pca(x, self.s, tol)
+    @override
+    def _init_dim_reduction(self, tol: float) -> None:
+        x = self.phi_x(self.x, self.matmul_batch)
+        f = null_pca(x, self.s, self.device, self.matmul_batch, rtol=tol)
         mu = x.mean(dim=0)
-        self.x = x.sub_(mu).mm(f).cpu()
-        self.x_test = self.x_test.sub_(mu).mm(f)
+        x.sub_(mu)
+        self.x_test.sub_(mu)
+
+        self.x = batched_matmul(x, f, self.matmul_batch, self.device)
+        self.x_test = batched_matmul(self.x_test, f, self.matmul_batch, self.device)
+
+        self.x.div_(self.x.norm(dim=1, keepdim=True))
+        self.x_test.div_(self.x_test.norm(dim=1, keepdim=True))
+
         self.update_encoder(f.shape[1], self.encoder_config.hidden_dim)
+
+    def _init_evp(self, tol: float):
+        w = self.get_embeddings(self.x, self.encoder_batch)
+
+        self.phi.change_sigma(median_heuristic_sigma(w, self.sigma_min))
+        self.phi_x.change_sigma(median_heuristic_sigma(self.x, self.sigma_min_x))
+
+        w = self.phi(w, self.matmul_batch)
+        x = self.phi_x(self.x, self.matmul_batch)
+        f = null_supervised_pca(w, x, self.s, self.device, self.matmul_batch, rtol=tol)
+
+        self.z = batched_matmul(w, f, self.matmul_batch, self.device)
+        self.x_test = batched_matmul(self.x_test, f, self.matmul_batch, self.device)
+
+        self.z.div_(self.x.norm(dim=1, keepdim=True))
+        self.x_test.div_(self.x_test.norm(dim=1, keepdim=True))
+
+    def init_erasure(self, tol: float) -> None:
+        self._init_dim_reduction(tol)
         self._init_encoder(self.init_erasure_epochs)
-        self.z = self.get_embeddings(self.x, self.update_batch)
-        self.x_test = self.get_embeddings(self.x_test, self.update_batch)
+        self._init_evp(tol)
 
     def _init_encoder(self, epochs: int) -> None:
         data = self.loader(InitDataset(self.x, self.s))
@@ -50,7 +82,3 @@ class Unsupervised(Obliviator):
                 loss = hs_z.mul_(self.tau_z) - hs_s
                 loss.backward()
                 optimizer.step()
-
-    @override
-    def solve_evp(self, tol: float) -> None:
-        return super().solve_evp(tol)

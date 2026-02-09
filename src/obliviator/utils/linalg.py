@@ -9,6 +9,19 @@ def cross_cov(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     return (x.T @ y).mul(1 / x.shape[0])
 
 
+def batched_cov(x: torch.Tensor, batch: int, device: torch.device) -> torch.Tensor:
+    mu_x = x.mean(dim=0).to(device=device)
+    batched_x = torch.split(x, batch)
+    Cxx = torch.zeros(x.shape[1], x.shape[1], device=device)
+
+    for xb in batched_x:
+        xb = xb.to(device=device, non_blocking=True)
+        xb = xb.sub(mu_x)
+        Cxx = Cxx.addmm(xb.T, xb)
+
+    return Cxx.div(x.shape[0])
+
+
 def batched_cross_cov(
     x: torch.Tensor, y: torch.Tensor, batch: int, device: torch.device
 ) -> torch.Tensor:
@@ -18,14 +31,29 @@ def batched_cross_cov(
     batched_y = torch.split(y, batch)
     Cxy = torch.zeros(x.shape[1], y.shape[1], device=device)
 
-    for x, y in zip(batched_x, batched_y):
-        x = x.to(device=device, non_blocking=True)
-        y = y.to(device=device, non_blocking=True)
-        x = x.sub(mu_x)
-        y = y.sub(mu_y)
-        Cxy = Cxy.addmm(x.T, y)
+    for xb, yb in zip(batched_x, batched_y):
+        xb = xb.to(device=device, non_blocking=True)
+        yb = yb.to(device=device, non_blocking=True)
+        xb = xb.sub(mu_x)
+        yb = yb.sub(mu_y)
+        Cxy = Cxy.addmm(xb.T, yb)
 
     return Cxy.div(x.shape[0])
+
+
+def batched_matmul(
+    x: torch.Tensor, y_fixed: torch.Tensor, batch: int | None, device: torch.device
+) -> torch.Tensor:
+    y_fixed = y_fixed.to(device=device)
+
+    if batch is None:
+        return x.mm(y_fixed).cpu()
+
+    def helper(bx: torch.Tensor):
+        bx = bx.to(device=device)
+        return bx.mm(y_fixed).cpu()
+
+    return torch.cat([helper(bx) for bx in torch.split(x, batch)], dim=0)
 
 
 def select_top_k_eigvec(x: torch.Tensor, rtol: float, atol: float) -> torch.Tensor:
@@ -35,22 +63,62 @@ def select_top_k_eigvec(x: torch.Tensor, rtol: float, atol: float) -> torch.Tens
 
 
 def find_null_xs(
-    x: torch.Tensor, s: torch.Tensor, rtol: float, atol: float = 1e-6
+    x: torch.Tensor,
+    s: torch.Tensor,
+    device: torch.device,
+    batch: int | None = None,
+    rtol: float = 1e-5,
+    atol: float = 1e-6,
 ) -> torch.Tensor:
-    Csx = cross_cov(s, x)
-    Csx = Csx.mm(Csx.T)
-    eigval, eigvec = torch.linalg.eigh(Csx)
-    tol = max(rtol * eigval[-1], atol)
-    return eigvec[:, eigval < tol]
+    if batch is None:
+        Csx = cross_cov(s, x)
+    else:
+        Csx = batched_cross_cov(s, x, batch, device)
+
+    _, sigmas, v = torch.linalg.svd(Csx, full_matrices=False)
+    tol = max(rtol * sigmas[0], atol)
+    v = v[sigmas > tol].T
+    full_v = torch.linalg.qr(v, mode="complete")[0]
+    return full_v[:, v.shape[1] :]
+
+
+def null_supervised_pca(
+    x: torch.Tensor,
+    y: torch.Tensor,
+    s: torch.Tensor,
+    device: torch.device,
+    batch: int | None = None,
+    rtol: float = 1e-5,
+    atol: float = 1e-6,
+) -> torch.Tensor:
+    u_null = find_null_xs(x, s, device, batch, rtol, atol)
+    if batch is None:
+        C = cross_cov(y, x)
+    else:
+        C = batched_cross_cov(x, y, batch, device)
+    C = C.mm(u_null)
+    C = u_null.T.mm(C)
+    pcs = select_top_k_eigvec(C, rtol, atol)
+    return u_null.mm(pcs)
 
 
 def null_pca(
-    x: torch.Tensor, s: torch.Tensor, rtol: float, atol: float = 1e-6
+    x: torch.Tensor,
+    s: torch.Tensor,
+    device: torch.device,
+    batch: int | None = None,
+    rtol: float = 1e-5,
+    atol: float = 1e-6,
 ) -> torch.Tensor:
-    U_null = find_null_xs(x, s, rtol, atol)
-    x_null = (x - x.mean(dim=0)).mm(U_null)
-    pcs = select_top_k_eigvec(torch.cov(x_null), rtol, atol)
-    return U_null.mm(pcs)
+    u_null = find_null_xs(x, s, device, batch, rtol, atol)
+    if batch is None:
+        C = torch.cov(x.T)
+    else:
+        C = batched_cov(x, batch, device)
+    C = C.mm(u_null)
+    C = u_null.T.mm(C)
+    pcs = select_top_k_eigvec(C, rtol, atol)
+    return u_null.mm(pcs)
 
 
 class RandomFourierFeature:
@@ -73,15 +141,18 @@ class RandomFourierFeature:
         self.sampler = helper_weight_sampler
         self.c = (1.0 / torch.tensor(dim_rff, device=device)).sqrt()
         self.resample = resample
-        if resample:
-            self.map_ptr = self.resample_map
-        else:
-            self.map_ptr = self.map
 
-    def map(self, x: torch.Tensor | ndarray) -> torch.Tensor:
-        x = torch.as_tensor(x, dtype=self.w.dtype).to(device=self.w.device)
+    def map(self, x: torch.Tensor) -> torch.Tensor:
         rff = x @ self.w
-        return torch.cat([rff.sin(), rff.cos()], dim=1).mul_(self.c)
+        return torch.cat([rff.sin(), rff.cos()], dim=1).mul(self.c)
+
+    def batched_map(self, x: torch.Tensor, batch: int) -> torch.Tensor:
+        feature = []
+        for xb in torch.split(x, batch):
+            xb = xb.to(device=self.w.device)
+            rff = x @ self.w
+            feature.append(torch.cat([rff.sin(), rff.cos()], dim=1).cpu())
+        return torch.cat(feature, dim=0)
 
     def change_input_dim(self, d_in: int) -> None:
         self._d_in = d_in
@@ -93,12 +164,18 @@ class RandomFourierFeature:
         if not self.resample:
             self.w = self.sampler()
 
-    def resample_map(self, x: torch.Tensor | ndarray) -> torch.Tensor:
-        self.w = self.sampler()
-        return self.map(x)
+    def __call__(
+        self, x: torch.Tensor | ndarray, batch: int | None = None
+    ) -> torch.Tensor:
+        if self.resample:
+            self.w = self.sampler()
 
-    def __call__(self, x: torch.Tensor | ndarray) -> torch.Tensor:
-        return self.map_ptr(x)
+        x = torch.as_tensor(x, dtype=self.w.dtype)
+        if batch is None:
+            x = x.to(device=self.w.device)
+            return self.map(x)
+
+        return self.batched_map(x, batch)
 
 
 def median_heuristic_sigma(

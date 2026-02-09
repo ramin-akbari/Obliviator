@@ -56,7 +56,8 @@ class ErasureConfig:
     evp_tau_z: float = 0.001
     evp_tau_x: float = 0.1
 
-    update_batch: int = 16384
+    matmul_batch: int | None = None
+    encoder_batch: int = 16384
 
     device: str = "cpu"
     optim_config: OptimConfig = field(default_factory=OptimConfig)
