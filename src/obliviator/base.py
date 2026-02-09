@@ -6,7 +6,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from .schemas import ErasureConfig
-from .utils.linalg import RandomFourierFeature, median_heuristic_sigma
+from .utils.linalg import RandomFourierFeature, median_sigma
 from .utils.misc import mlp_factory, optim_factory
 
 NUM_THREADS = 8
@@ -68,7 +68,7 @@ class Obliviator(ABC):
             config.drff_max,
             self.device,
             config.resample_x,
-            median_heuristic_sigma(self.x, config.sigma_min_x),
+            median_sigma(self.x, config.sigma_min_x),
         )
 
         self.phi_z = _rff_helper(
@@ -94,15 +94,15 @@ class Obliviator(ABC):
                 config.drff_max,
                 self.device,
                 False,
-                median_heuristic_sigma(s, config.sigma_min_s),
+                median_sigma(s, config.sigma_min_s),
             )
-            self.s = phi_s(self.s)
+            self.s = phi_s(self.s, self.matmul_batch)
 
     def _loss_embeddings(self, z_batch: torch.Tensor) -> torch.Tensor:
         w = self.encoder(z_batch)
         w = w.div(w.norm(dim=1, keepdim=True))
-        self.phi.change_sigma(median_heuristic_sigma(w, self.sigma_min))
-        return self.phi(z_batch)
+        self.phi.change_params(sigma=median_sigma(w, self.sigma_min))
+        return self.phi(w)
 
     @torch.no_grad()
     def get_embeddings(self, z: torch.Tensor, batch: int) -> torch.Tensor:
@@ -119,7 +119,7 @@ class Obliviator(ABC):
         self.encoder_config.input_dim = in_dim
 
         if out_dim != self.encoder_config.out_dim:
-            self.phi.change_input_dim(out_dim)
+            self.phi.change_params(d_in=out_dim)
             self.encoder_config.out_dim = out_dim
             self.encoder_config.hidden_dim = out_dim
 

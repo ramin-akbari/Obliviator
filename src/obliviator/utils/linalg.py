@@ -1,4 +1,5 @@
 from functools import partial
+from math import sqrt as pysqrt
 
 import torch
 from numpy import ndarray
@@ -132,21 +133,21 @@ class RandomFourierFeature:
     def __init__(
         self,
         d_in: int,
-        dim_rff: int,
+        drff: int,
         resample: bool,
         sigma_rff: float,
         device: torch.device,
     ) -> None:
-        dim_rff = dim_rff // 2
+        self._drff = drff // 2
         self._sigma = sigma_rff
         self._d_in = d_in
 
         def helper_weight_sampler() -> torch.Tensor:
-            return torch.randn(self._d_in, dim_rff, device=device).div_(self._sigma)
+            return torch.randn(self._d_in, self._drff, device=device).div_(self._sigma)
 
         self.w = helper_weight_sampler()
         self.sampler = helper_weight_sampler
-        self.c = (1.0 / torch.tensor(dim_rff, device=device)).sqrt()
+        self.c = pysqrt(1.0 / self._drff)
         self.resample = resample
 
     def map(self, x: torch.Tensor) -> torch.Tensor:
@@ -157,17 +158,23 @@ class RandomFourierFeature:
         feature = []
         for xb in torch.split(x, batch):
             xb = xb.to(device=self.w.device)
-            rff = x @ self.w
+            rff = xb @ self.w
             feature.append(torch.cat([rff.sin(), rff.cos()], dim=1).cpu())
         return torch.cat(feature, dim=0)
 
-    def change_input_dim(self, d_in: int) -> None:
-        self._d_in = d_in
-        if not self.resample:
-            self.w = self.sampler()
-
-    def change_sigma(self, sigma: float) -> None:
-        self._sigma = sigma
+    def change_params(
+        self,
+        d_in: int | None = None,
+        sigma: float | None = None,
+        drff: int | None = None,
+    ) -> None:
+        if d_in is not None:
+            self._d_in = d_in
+        if sigma is not None:
+            self._sigma = sigma
+        if drff is not None:
+            self._drff = drff // 2
+            self.c = pysqrt(1.0 / self._drff)
         if not self.resample:
             self.w = self.sampler()
 
@@ -185,7 +192,7 @@ class RandomFourierFeature:
         return self.batched_map(x, batch)
 
 
-def median_heuristic_sigma(
+def median_sigma(
     x: torch.Tensor | ndarray, sigma_min: float, max_sample: int = 5_000
 ) -> float:
     x = torch.as_tensor(x)
