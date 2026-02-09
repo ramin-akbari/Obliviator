@@ -4,9 +4,10 @@ from functools import partial
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
+from tqdm import trange
 
 from .schemas import ErasureConfig
-from .utils.linalg import RandomFourierFeature, batched_matmul, median_sigma
+from .utils.linalg import RandomFourierFeature, batched_matmul, cross_cov, median_sigma
 from .utils.misc import mlp_factory, optim_factory
 
 NUM_THREADS = 8
@@ -140,16 +141,34 @@ class Obliviator(ABC):
             self.x_test.div_(self.x_test.norm(dim=1, keepdim=True))
         return x
 
+    def train_encoder(self, data: DataLoader, taus: list[float], epochs: int) -> None:
+        pbar = trange(epochs)
+        optimizer = self.optim_factory(self.encoder.parameters())
+        for _ in pbar:
+            for *rvs, s in data:
+                optimizer.zero_grad()
+                s = s.to(self.device, non_blocking=True)
+                rvs = [rv.to(self.device, non_blocking=True) for rv in rvs]
+                w = self._loss_embeddings(rvs[0])
+
+                sc_s = torch.cov(s.T).norm("fro").sqrt()
+                hs_s = cross_cov(w, s).norm("fro").div(sc_s)
+
+                hs_y = torch.tensor(0.0, device=self.device)
+                for tau, rv in zip(taus, rvs):
+                    sc = torch.cov(rv.T).norm("fro").sqrt()
+                    hs_y = hs_y + cross_cov(w, rv).norm("fro").mul(tau / sc)
+
+                loss = hs_s - hs_y
+                loss.backward()
+                optimizer.step()
+
     @abstractmethod
     def _init_dim_reduction(self, tol: float) -> None:
         pass
 
     @abstractmethod
     def init_erasure(self, tol: float) -> None:
-        pass
-
-    @abstractmethod
-    def train_encoder(self, epochs: int) -> None:
         pass
 
     @abstractmethod

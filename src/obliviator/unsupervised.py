@@ -8,7 +8,6 @@ from .base import Obliviator
 from .schemas import UnsupervisedConfig
 from .utils.dataloader import InitDataset
 from .utils.linalg import (
-    batched_matmul,
     cross_cov,
     median_sigma,
     null_pca,
@@ -64,25 +63,3 @@ class Unsupervised(Obliviator):
         self._init_dim_reduction(tol)
         # self._init_encoder(self.init_erasure_epochs)
         self._init_evp(tol)
-
-    def _init_encoder(self, data: DataLoader, taus: list[float], epochs: int) -> None:
-        pbar = trange(epochs)
-        optimizer = self.optim_factory(self.encoder.parameters())
-        for _ in pbar:
-            for *rvs, s in data:
-                optimizer.zero_grad()
-                s = s.to(self.device, non_blocking=True)
-                rvs = [rv.to(self.device, non_blocking=True) for rv in rvs]
-                w = self._loss_embeddings(rvs[0])
-
-                sc_s = torch.cov(s.T).norm("fro").sqrt()
-                hs_s = cross_cov(w, s).norm("fro").div(sc_s)
-
-                hs_y = torch.tensor(0.0, device=self.device)
-                for tau, rv in zip(taus, rvs):
-                    sc = torch.cov(rv.T).norm("fro").sqrt()
-                    hs_y = hs_y + cross_cov(w, rv).norm("fro").mul(tau / sc)
-
-                loss = hs_s - hs_y
-                loss.backward()
-                optimizer.step()
