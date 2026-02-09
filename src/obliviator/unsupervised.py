@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from torch.utils.data.dataloader import DataLoader
 from tqdm import trange
 from typing_extensions import override
 
@@ -25,6 +26,7 @@ class Unsupervised(Obliviator):
         dtype: torch.dtype = torch.float32,
     ) -> None:
         super().__init__(x, s, x_test, config, dtype)
+
         self.init_erasure_epochs = config.init_erasure_epochs
         self.init_erasure_steps = config.init_erasure_steps
 
@@ -35,15 +37,7 @@ class Unsupervised(Obliviator):
 
         f = null_pca(x, self.s, self.device, self.matmul_batch, rtol=tol)
 
-        mu = x.mean(dim=0)
-        x.sub_(mu)
-        self.x = batched_matmul(x, f, self.matmul_batch, self.device)
-
-        self.x_test.sub_(mu)
-        self.x_test = batched_matmul(self.x_test, f, self.matmul_batch, self.device)
-
-        self.x.div_(self.x.norm(dim=1, keepdim=True))
-        self.x_test.div_(self.x_test.norm(dim=1, keepdim=True))
+        self.x = self.eval_function(f, self.x, True)
 
         self.phi_x.change_params(
             d_in=f.shape[1], sigma=median_sigma(self.x, self.sigma_min_x)
@@ -58,42 +52,37 @@ class Unsupervised(Obliviator):
 
         w = self.phi(w, self.matmul_batch)
         self.x_test = self.phi(self.x_test, self.matmul_batch)
-
         x = self.phi_x(self.x, self.matmul_batch)
 
         f = null_supervised_pca(
             w, (x,), (self.tau_x,), self.s, self.device, self.matmul_batch, rtol=tol
         )
 
-        mu = w.mean(dim=0)
-        w.sub_(mu)
-        self.x_test.sub_(mu)
-
-        self.z = batched_matmul(w, f, self.matmul_batch, self.device)
-        self.x_test = batched_matmul(self.x_test, f, self.matmul_batch, self.device)
-
-        self.z.div_(self.x.norm(dim=1, keepdim=True))
-        self.x_test.div_(self.x_test.norm(dim=1, keepdim=True))
+        self.z = self.eval_function(f, w, True)
 
     def init_erasure(self, tol: float) -> None:
         self._init_dim_reduction(tol)
-        self._init_encoder(self.init_erasure_epochs)
+        # self._init_encoder(self.init_erasure_epochs)
         self._init_evp(tol)
 
-    def _init_encoder(self, epochs: int) -> None:
-        data = self.loader(InitDataset(self.x, self.s))
+    def _init_encoder(self, data: DataLoader, taus: list[float], epochs: int) -> None:
         pbar = trange(epochs)
         optimizer = self.optim_factory(self.encoder.parameters())
         for _ in pbar:
-            for z, s in data:
+            for *rvs, s in data:
                 optimizer.zero_grad()
-                z = z.to(self.device, non_blocking=True)
                 s = s.to(self.device, non_blocking=True)
+                rvs = [rv.to(self.device, non_blocking=True) for rv in rvs]
+                w = self._loss_embeddings(rvs[0])
+
                 sc_s = torch.cov(s.T).norm("fro").sqrt()
-                sc_z = torch.cov(z.T).norm("fro").sqrt()
-                w = self._loss_embeddings(z)
-                hs_s = cross_cov(w, s).norm("fro").div_(sc_s)
-                hs_z = cross_cov(w, z).norm("fro").div_(sc_z)
-                loss = hs_s - hs_z.mul_(self.tau_z)
+                hs_s = cross_cov(w, s).norm("fro").div(sc_s)
+
+                hs_y = torch.tensor(0.0, device=self.device)
+                for tau, rv in zip(taus, rvs):
+                    sc = torch.cov(rv.T).norm("fro").sqrt()
+                    hs_y = hs_y + cross_cov(w, rv).norm("fro").mul(tau / sc)
+
+                loss = hs_s - hs_y
                 loss.backward()
                 optimizer.step()

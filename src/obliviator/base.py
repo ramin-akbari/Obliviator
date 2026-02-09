@@ -6,7 +6,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from .schemas import ErasureConfig
-from .utils.linalg import RandomFourierFeature, median_sigma
+from .utils.linalg import RandomFourierFeature, batched_matmul, median_sigma
 from .utils.misc import mlp_factory, optim_factory
 
 NUM_THREADS = 8
@@ -124,6 +124,21 @@ class Obliviator(ABC):
             self.encoder_config.hidden_dim = out_dim
 
         self.encoder = mlp_factory(self.encoder_config)
+
+    def eval_function(
+        self, f: torch.Tensor, x: torch.Tensor, normalize: bool = True
+    ) -> torch.Tensor:
+        mu = x.mean(dim=0)
+        x.sub_(mu)
+        x = batched_matmul(x, f, self.matmul_batch, self.device)
+
+        self.x_test.sub_(mu)
+        self.x_test = batched_matmul(self.x_test, f, self.matmul_batch, self.device)
+
+        if normalize:
+            x.div_(self.x.norm(dim=1, keepdim=True))
+            self.x_test.div_(self.x_test.norm(dim=1, keepdim=True))
+        return x
 
     @abstractmethod
     def _init_dim_reduction(self, tol: float) -> None:

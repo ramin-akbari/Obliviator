@@ -9,6 +9,8 @@ from tqdm import trange
 from obliviator.schemas import MLPConfig, OptimConfig
 from obliviator.utils.misc import mlp_factory, optim_factory
 
+NUM_THREADS = 8
+
 
 class ClassficationDataset(Dataset):
     def __init__(
@@ -49,7 +51,7 @@ class MLPCrossEntropy:
             batch_size=OptimConfig.batch_size,
             shuffle=True,
             drop_last=True,
-            num_workers=4,
+            num_workers=NUM_THREADS,
             pin_memory=True,
         )
 
