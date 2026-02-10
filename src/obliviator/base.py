@@ -23,7 +23,6 @@ class Obliviator(ABC):
         config: UnsupervisedConfig,
         dtype: torch.dtype = torch.float32,
     ) -> None:
-
         self.x = torch.as_tensor(x, dtype=dtype)
         self.s = torch.as_tensor(s, dtype=dtype)
         self.x_test = torch.as_tensor(x_test, dtype=dtype)
@@ -155,7 +154,6 @@ class Obliviator(ABC):
         n_cached: int,
         epochs: int,
     ):
-
         data = self.loader(TensorDataset(*data_list))
         optimizer = self.optim_factory(self.encoder.parameters())
         pbar = trange(epochs)
@@ -169,6 +167,7 @@ class Obliviator(ABC):
                 w = self._rff_encoder_embeddings(z)
 
                 hs_s = cross_cov(w, s).square().mean().sqrt()
+
                 hs_p = torch.tensor(0.0, device=self.device)
 
                 for tau, rv in zip(cached_taus, rvs[:n_cached]):

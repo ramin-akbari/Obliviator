@@ -1,16 +1,11 @@
-from math import tau
-
 import numpy as np
 import torch
-from torch.utils.data import TensorDataset
-from tqdm import trange
 from typing_extensions import override
 
 from .base import Obliviator
 from .schemas import UnsupervisedConfig
 from .utils.linalg import (
     RandomFourierFeature,
-    cross_cov,
     median_sigma,
     null_pca,
     null_supervised_pca,
