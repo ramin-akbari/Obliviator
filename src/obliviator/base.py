@@ -7,7 +7,8 @@ from torch.utils.data import DataLoader, TensorDataset
 from tqdm import trange
 
 from .schemas import UnsupervisedConfig
-from .utils.linalg import RandomFourierFeature, batched_matmul, cross_cov, median_sigma
+from .utils.kernel import RandomFourierFeature, median_sigma
+from .utils.linalg import batched_matmul, cross_cov
 from .utils.misc import mlp_factory, optim_factory
 
 NUM_THREADS = 8
