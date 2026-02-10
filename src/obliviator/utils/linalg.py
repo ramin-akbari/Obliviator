@@ -1,8 +1,6 @@
 from functools import partial
-from math import sqrt as pysqrt
 
 import torch
-from numpy import ndarray
 
 
 def cross_cov(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
@@ -50,11 +48,11 @@ def batched_matmul(
     y_fixed = y_fixed.to(device=device)
 
     if batch is None:
-        return x.mm(y_fixed).cpu()
+        return x.mm(y_fixed).to(device=x.device)
 
     def helper(bx: torch.Tensor):
         bx = bx.to(device=device)
-        return bx.mm(y_fixed).cpu()
+        return bx.mm(y_fixed).to(device=bx.device)
 
     return torch.cat([helper(bx) for bx in torch.split(x, batch)], dim=0)
 
@@ -127,92 +125,3 @@ def null_pca(
     C = u_null.T.mm(C)
     pcs = select_top_k_eigvec(C, rtol, atol)
     return u_null.mm(pcs)
-
-
-class RandomFourierFeature:
-    def __init__(
-        self,
-        d_in: int,
-        scale: int,
-        drff_max: int,
-        drff_min: int,
-        sigma_rff: float,
-        resample: bool,
-        device: torch.device,
-    ) -> None:
-        def helper_rff(d_in: int):
-            return max(min(scale * d_in, drff_max), drff_min) // 2
-
-        self._get_drff = helper_rff
-        self._drff = self._get_drff(d_in)
-        self._sigma = sigma_rff
-        self._d_in = d_in
-
-        def helper_weight_sampler() -> torch.Tensor:
-            return torch.randn(self._d_in, self._drff, device=device).div_(self._sigma)
-
-        self.w = helper_weight_sampler()
-        self.sampler = helper_weight_sampler
-        self.c = pysqrt(1.0 / self._drff)
-        self.resample = resample
-
-    def map(self, x: torch.Tensor) -> torch.Tensor:
-        x = x.to(device=self.w.device)
-        rff = x @ self.w
-        return torch.cat([rff.sin(), rff.cos()], dim=1).mul(self.c)
-
-    def batched_map(self, x: torch.Tensor, batch: int) -> torch.Tensor:
-        feature = []
-        for xb in torch.split(x, batch):
-            xb = xb.to(device=self.w.device)
-            rff = xb @ self.w
-            feature.append(torch.cat([rff.sin(), rff.cos()], dim=1).cpu())
-        return torch.cat(feature, dim=0)
-
-    def change_params(
-        self,
-        d_in: int | None = None,
-        sigma: float | None = None,
-    ) -> None:
-        resample = False
-        if d_in is not None and d_in != self._d_in:
-            self._d_in = d_in
-            self._drff = self._get_drff(d_in)
-            self.c = pysqrt(1.0 / self._drff)
-            resample = True
-
-        if sigma is not None:
-            self._sigma = sigma
-            self.sample_weights()
-            return
-
-        if resample:
-            self.sample_weights()
-
-    def __call__(self, x: torch.Tensor, batch: int | None = None) -> torch.Tensor:
-        if batch is None:
-            return self.map(x)
-
-        return self.batched_map(x, batch)
-
-    def sample_weights(self):
-        self.w = self.sampler()
-
-
-def median_sigma(
-    x: torch.Tensor | ndarray,
-    sigma_min: float,
-    alpha: float = 1,
-    max_sample: int = 5_000,
-) -> float:
-    x = torch.as_tensor(x)
-    if x.shape[0] > max_sample:
-        x = x[torch.randperm(x.shape[0])[:max_sample]]
-
-    n = x.shape[0]
-    sigma = (
-        torch.cdist(x, x)[*torch.triu_indices(n, n, offset=1, device=x.device)]
-        .median()
-        .item()
-    )
-    return max(alpha * sigma, sigma_min)

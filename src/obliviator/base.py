@@ -104,13 +104,14 @@ class Obliviator(ABC):
     def get_embeddings(self, z: torch.Tensor, batch: int) -> torch.Tensor:
         def helper(x: torch.Tensor) -> torch.Tensor:
             x = self.encoder(x.to(device=self.device, non_blocking=True))
-            return x.div_(x.norm(dim=1, keepdim=True)).cpu()
+            return x.div_(x.norm(dim=1, keepdim=True)).to(device=x.device)
 
         return torch.cat(
             [helper(z_batched) for z_batched in torch.split(z, batch, dim=0)],
             dim=0,
         )
 
+    # update encoder for iterative erasure
     def update_encoder(self, in_dim: int, out_dim: int) -> None:
         self.encoder_config.input_dim = in_dim
 
@@ -130,6 +131,7 @@ class Obliviator(ABC):
             d_in=z.shape[1], sigma=median_sigma(z, self.sigma_min_z)
         )
 
+    # equivalent to f(x) - mu_f
     def update_and_project(
         self, f: torch.Tensor, x: torch.Tensor, normalize: bool = True
     ) -> torch.Tensor:
@@ -170,9 +172,11 @@ class Obliviator(ABC):
 
                 hs_p = torch.tensor(0.0, device=self.device)
 
+                # HSIC for cached inputs, we normalize HSIC based on the dimension of RVs
                 for tau, rv in zip(cached_taus, rvs[:n_cached]):
                     hs_p = hs_p + cross_cov(w, rv).square().mean().sqrt().mul(tau)
 
+                # HSIC for not_cached inputs
                 for tau, rff, rv in zip(taus, map_list, rvs[n_cached:]):
                     hs_p = hs_p + cross_cov(w, rff(rv)).square().mean().sqrt().mul(tau)
 
@@ -180,6 +184,7 @@ class Obliviator(ABC):
                 loss.backward()
                 optimizer.step()
 
+            # resample RFF weights
             for map in map_list:
                 if map.resample:
                     map.sample_weights()
