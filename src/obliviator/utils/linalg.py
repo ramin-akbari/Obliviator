@@ -133,12 +133,18 @@ class RandomFourierFeature:
     def __init__(
         self,
         d_in: int,
-        drff: int,
-        resample: bool,
+        scale: int,
+        drff_max: int,
+        drff_min: int,
         sigma_rff: float,
+        resample: bool,
         device: torch.device,
     ) -> None:
-        self._drff = drff // 2
+        def helper_rff(d_in: int):
+            return max(min(scale * d_in, drff_max), drff_min) // 2
+
+        self._get_drff = helper_rff
+        self._drff = self._get_drff(d_in)
         self._sigma = sigma_rff
         self._d_in = d_in
 
@@ -166,34 +172,31 @@ class RandomFourierFeature:
         self,
         d_in: int | None = None,
         sigma: float | None = None,
-        drff: int | None = None,
     ) -> None:
+
         if d_in is not None:
             self._d_in = d_in
+            self._drff = self._get_drff(d_in)
+            self.c = pysqrt(1.0 / self._drff)
+
         if sigma is not None:
             self._sigma = sigma
-        if drff is not None:
-            self._drff = drff // 2
-            self.c = pysqrt(1.0 / self._drff)
-        if not self.resample:
-            self.w = self.sampler()
 
-    def __call__(
-        self, x: torch.Tensor | ndarray, batch: int | None = None
-    ) -> torch.Tensor:
-        if self.resample:
-            self.w = self.sampler()
+        self.w = self.sampler()
 
-        x = torch.as_tensor(x, dtype=self.w.dtype)
+    def __call__(self, x: torch.Tensor, batch: int | None = None) -> torch.Tensor:
         if batch is None:
             x = x.to(device=self.w.device)
-            return self.map(x)
+            return self.map(x).cpu()
 
         return self.batched_map(x, batch)
 
 
 def median_sigma(
-    x: torch.Tensor | ndarray, sigma_min: float, max_sample: int = 5_000
+    x: torch.Tensor | ndarray,
+    sigma_min: float,
+    alpha: float = 1,
+    max_sample: int = 5_000,
 ) -> float:
     x = torch.as_tensor(x)
     if x.shape[0] > max_sample:
@@ -205,4 +208,4 @@ def median_sigma(
         .median()
         .item()
     )
-    return max(sigma, sigma_min)
+    return max(alpha * sigma, sigma_min)

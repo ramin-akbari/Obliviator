@@ -3,27 +3,15 @@ from functools import partial
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 from tqdm import trange
 
-from .schemas import ErasureConfig
+from .schemas import UnsupervisedConfig
 from .utils.linalg import RandomFourierFeature, batched_matmul, cross_cov, median_sigma
 from .utils.misc import mlp_factory, optim_factory
 
 NUM_THREADS = 8
 DRFF_SCALE: int = 4
-
-
-def _rff_helper(
-    d_in: int,
-    d_min: int,
-    d_max: int,
-    device: torch.device,
-    resample: bool,
-    sigma: float = 1,
-) -> RandomFourierFeature:
-    drrf = max(min(DRFF_SCALE * d_in, d_max), d_min)
-    return RandomFourierFeature(d_in, drrf, resample, sigma, device)
 
 
 class Obliviator(ABC):
@@ -32,7 +20,7 @@ class Obliviator(ABC):
         x: torch.Tensor | np.ndarray,
         s: torch.Tensor | np.ndarray,
         x_test: torch.Tensor | np.ndarray,
-        config: ErasureConfig,
+        config: UnsupervisedConfig,
         dtype: torch.dtype = torch.float32,
     ) -> None:
 
@@ -43,8 +31,9 @@ class Obliviator(ABC):
         self.sigma_min = config.sigma_min
         self.sigma_min_z = config.sigma_min_z
         self.sigma_min_x = config.sigma_min_x
+        self.smooth_sigma_factor = config.smoother_rff_factor
 
-        self.encoder_batch = config.encoder_batch
+        self.encoder_batch = config.optim_config.batch_size
         self.matmul_batch = config.matmul_batch
 
         self.tau_x = config.tau_x
@@ -62,47 +51,54 @@ class Obliviator(ABC):
             shuffle=True,
             drop_last=True,
         )
-
-        self.phi_x = _rff_helper(
-            self.x.shape[1],
-            config.drff_min,
+        self.phi_x = RandomFourierFeature(
+            x.shape[1],
+            config.rff_scale_x,
             config.drff_max,
-            self.device,
+            config.drff_min,
+            median_sigma(x, config.sigma_min_x),
             config.resample_x,
-            median_sigma(self.x, config.sigma_min_x),
+            self.device,
         )
 
-        self.phi_z = _rff_helper(
+        self.phi_z = RandomFourierFeature(
             config.encoder_config.out_dim,
-            config.drff_min,
+            config.rff_scale_z,
             config.drff_max,
-            self.device,
+            config.drff_min,
+            median_sigma(x, config.sigma_min_z),
             config.resample_z,
+            self.device,
         )
 
-        self.phi = _rff_helper(
+        self.phi = RandomFourierFeature(
             config.encoder_config.out_dim,
-            config.drff_min,
+            config.rff_scale,
             config.drff_max,
+            config.drff_min,
+            median_sigma(x, config.sigma_min),
+            False,
             self.device,
-            True,
         )
 
         if config.use_rff_s:
-            phi_s = _rff_helper(
-                self.s.shape[1],
-                config.drff_label_min,
+            phi_s = RandomFourierFeature(
+                s.shape[1],
+                config.rff_scale_s,
                 config.drff_max,
-                self.device,
+                config.drff_min_s,
+                median_sigma(x, config.sigma_min_s),
                 False,
-                median_sigma(s, config.sigma_min_s),
+                self.device,
             )
-            self.s = phi_s(self.s, self.matmul_batch)
+            s = phi_s(self.s, self.matmul_batch)
 
-    def _loss_embeddings(self, z_batch: torch.Tensor) -> torch.Tensor:
+    def _rff_encoder_embeddings(self, z_batch: torch.Tensor) -> torch.Tensor:
         w = self.encoder(z_batch)
         w = w.div(w.norm(dim=1, keepdim=True))
-        self.phi.change_params(sigma=median_sigma(w, self.sigma_min))
+        self.phi.change_params(
+            sigma=median_sigma(w, self.sigma_min, alpha=self.smooth_sigma_factor)
+        )
         return self.phi(w)
 
     @torch.no_grad()
@@ -126,7 +122,16 @@ class Obliviator(ABC):
 
         self.encoder = mlp_factory(self.encoder_config)
 
-    def eval_function(
+    def update_interim_rvs(
+        self, rv: torch.Tensor, update_x: bool = False, normalize: bool = True
+    ):
+        z = self.get_embeddings(rv, self.encoder_batch)
+        self.x_test = self.get_embeddings(self.x_test, self.encoder_batch)
+        self.phi_z.change_params(
+            d_in=z.shape[1], sigma=median_sigma(z, self.sigma_min_z)
+        )
+
+    def update_and_project(
         self, f: torch.Tensor, x: torch.Tensor, normalize: bool = True
     ) -> torch.Tensor:
         mu = x.mean(dim=0)
@@ -141,34 +146,38 @@ class Obliviator(ABC):
             self.x_test.div_(self.x_test.norm(dim=1, keepdim=True))
         return x
 
-    def train_encoder(self, data: DataLoader, taus: list[float], epochs: int) -> None:
+    def train_encoder(
+        self,
+        data_list: list[torch.Tensor],
+        map_list: list[RandomFourierFeature],
+        taus: list[float],
+        epochs: int,
+    ) -> None:
         pbar = trange(epochs)
+        data = self.loader(TensorDataset(*data_list))
         optimizer = self.optim_factory(self.encoder.parameters())
         for _ in pbar:
             for *rvs, s in data:
                 optimizer.zero_grad()
                 s = s.to(self.device, non_blocking=True)
                 rvs = [rv.to(self.device, non_blocking=True) for rv in rvs]
-                w = self._loss_embeddings(rvs[0])
+                w = self._rff_encoder_embeddings(rvs[0])
 
-                sc_s = torch.cov(s.T).norm("fro").sqrt()
-                hs_s = cross_cov(w, s).norm("fro").div(sc_s)
-
+                hs_s = cross_cov(w, s).square().mean().sqrt()
                 hs_y = torch.tensor(0.0, device=self.device)
-                for tau, rv in zip(taus, rvs):
-                    sc = torch.cov(rv.T).norm("fro").sqrt()
-                    hs_y = hs_y + cross_cov(w, rv).norm("fro").mul(tau / sc)
+                for tau, rff, rv in zip(taus, map_list, rvs):
+                    hs_y = hs_y + cross_cov(w, rff(rv)).square().mean().sqrt().mul(tau)
 
                 loss = hs_s - hs_y
                 loss.backward()
                 optimizer.step()
 
     @abstractmethod
-    def _init_dim_reduction(self, tol: float) -> None:
+    def init_dim_reduction(self, tol: float) -> None:
         pass
 
     @abstractmethod
-    def init_erasure(self, tol: float) -> None:
+    def init_erasure(self, tol: float, epochs: int) -> None:
         pass
 
     @abstractmethod

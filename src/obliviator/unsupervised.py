@@ -1,14 +1,10 @@
 import numpy as np
 import torch
-from torch.utils.data.dataloader import DataLoader
-from tqdm import trange
 from typing_extensions import override
 
 from .base import Obliviator
 from .schemas import UnsupervisedConfig
-from .utils.dataloader import InitDataset
 from .utils.linalg import (
-    cross_cov,
     median_sigma,
     null_pca,
     null_supervised_pca,
@@ -26,17 +22,14 @@ class Unsupervised(Obliviator):
     ) -> None:
         super().__init__(x, s, x_test, config, dtype)
 
-        self.init_erasure_epochs = config.init_erasure_epochs
-        self.init_erasure_steps = config.init_erasure_steps
-
     @override
-    def _init_dim_reduction(self, tol: float) -> None:
+    def init_dim_reduction(self, tol: float) -> None:
         x = self.phi_x(self.x, self.matmul_batch)
         self.x_test = self.phi_x(self.x_test, self.matmul_batch)
 
         f = null_pca(x, self.s, self.device, self.matmul_batch, rtol=tol)
 
-        self.x = self.eval_function(f, self.x, True)
+        self.x = self.update_and_project(f, self.x, True)
 
         self.phi_x.change_params(
             d_in=f.shape[1], sigma=median_sigma(self.x, self.sigma_min_x)
@@ -57,9 +50,4 @@ class Unsupervised(Obliviator):
             w, (x,), (self.tau_x,), self.s, self.device, self.matmul_batch, rtol=tol
         )
 
-        self.z = self.eval_function(f, w, True)
-
-    def init_erasure(self, tol: float) -> None:
-        self._init_dim_reduction(tol)
-        # self._init_encoder(self.init_erasure_epochs)
-        self._init_evp(tol)
+        self.z = self.update_and_project(f, w, True)

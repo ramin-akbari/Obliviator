@@ -3,32 +3,13 @@ from dataclasses import field
 import numpy as np
 import torch
 import torch.nn as tnn
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, TensorDataset
 from tqdm import trange
 
 from obliviator.schemas import MLPConfig, OptimConfig
 from obliviator.utils.misc import mlp_factory, optim_factory
 
 NUM_THREADS = 8
-
-
-class ClassficationDataset(Dataset):
-    def __init__(
-        self,
-        x: torch.Tensor | np.ndarray,
-        y: torch.Tensor | np.ndarray,
-        dtype: torch.dtype = torch.float32,
-    ) -> None:
-        super().__init__()
-        assert len(x) == len(y), "Inputs x and labels y must have the same length!"
-        self.x = torch.as_tensor(x, dtype=dtype)
-        self.y = torch.as_tensor(y)
-
-    def __len__(self) -> int:
-        return self.x.shape[0]
-
-    def __getitem__(self, idx) -> tuple[torch.Tensor, torch.Tensor]:
-        return self.x[idx], self.y[idx]
 
 
 class MLPCrossEntropy:
@@ -45,7 +26,7 @@ class MLPCrossEntropy:
     ) -> None:
         self.x_test = x_test.to(device=device)
         self.y_test = y_test.to(device=device)
-        data = ClassficationDataset(x, y)
+        data = TensorDataset(x, y)
         self.loader = DataLoader(
             data,
             batch_size=OptimConfig.batch_size,
