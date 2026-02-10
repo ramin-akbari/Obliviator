@@ -146,40 +146,82 @@ class Obliviator(ABC):
             self.x_test.div_(self.x_test.norm(dim=1, keepdim=True))
         return x
 
-    def train_encoder(
+    def _train(
         self,
         data_list: list[torch.Tensor],
         map_list: list[RandomFourierFeature],
+        cached_taus: list[float],
         taus: list[float],
+        n_cached: int,
         epochs: int,
-    ) -> None:
-        pbar = trange(epochs)
+    ):
+
         data = self.loader(TensorDataset(*data_list))
         optimizer = self.optim_factory(self.encoder.parameters())
+        pbar = trange(epochs)
+
         for _ in pbar:
-            for *rvs, s in data:
+            for *rvs, z, s in data:
                 optimizer.zero_grad()
                 s = s.to(self.device, non_blocking=True)
+                z = z.to(self.device, non_blocking=True)
                 rvs = [rv.to(self.device, non_blocking=True) for rv in rvs]
-                w = self._rff_encoder_embeddings(rvs[0])
+                w = self._rff_encoder_embeddings(z)
 
                 hs_s = cross_cov(w, s).square().mean().sqrt()
-                hs_y = torch.tensor(0.0, device=self.device)
-                for tau, rff, rv in zip(taus, map_list, rvs):
-                    hs_y = hs_y + cross_cov(w, rff(rv)).square().mean().sqrt().mul(tau)
+                hs_p = torch.tensor(0.0, device=self.device)
 
-                loss = hs_s - hs_y
+                for tau, rv in zip(cached_taus, rvs[:n_cached]):
+                    hs_p = hs_p + cross_cov(w, rv).square().mean().sqrt().mul(tau)
+
+                for tau, rff, rv in zip(taus, map_list, rvs[n_cached:]):
+                    hs_p = hs_p + cross_cov(w, rff(rv)).square().mean().sqrt().mul(tau)
+
+                loss = hs_s - hs_p
                 loss.backward()
                 optimizer.step()
 
+            for map in map_list:
+                if map.resample:
+                    map.sample_weights()
+
+        return
+
+    def _cache_rff(
+        self,
+        data_list: list[torch.Tensor],
+        map_list: list[RandomFourierFeature],
+        tau_list: list[float],
+    ) -> tuple[
+        list[torch.Tensor],
+        list[float],
+        list[torch.Tensor],
+        list[float],
+        list[RandomFourierFeature],
+    ]:
+        cached = []
+        cached_tau = []
+        not_cached = []
+        not_cached_map = []
+        not_cached_tau = []
+
+        for map, data, tau in zip(map_list, data_list, tau_list):
+            if not map.resample:
+                cached.append(map(data, self.matmul_batch))
+                cached_tau.append(tau)
+            else:
+                not_cached.append(data)
+                not_cached_map.append(map)
+                not_cached_tau.append(tau)
+
+        return cached, cached_tau, not_cached, not_cached_tau, not_cached_map
+
     @abstractmethod
-    def init_dim_reduction(self, tol: float) -> None:
+    def null_dim_reduction(self, tol: float) -> tuple[torch.Tensor, torch.Tensor]:
         pass
 
     @abstractmethod
-    def init_erasure(self, tol: float, epochs: int) -> None:
-        pass
-
-    @abstractmethod
-    def solve_evp(self, tol: float) -> None:
+    def init_erasure(
+        self, tol: float, epochs: int
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         pass

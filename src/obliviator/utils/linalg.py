@@ -157,6 +157,7 @@ class RandomFourierFeature:
         self.resample = resample
 
     def map(self, x: torch.Tensor) -> torch.Tensor:
+        x = x.to(device=self.w.device)
         rff = x @ self.w
         return torch.cat([rff.sin(), rff.cos()], dim=1).mul(self.c)
 
@@ -173,23 +174,29 @@ class RandomFourierFeature:
         d_in: int | None = None,
         sigma: float | None = None,
     ) -> None:
-
-        if d_in is not None:
+        resample = False
+        if d_in is not None and d_in != self._d_in:
             self._d_in = d_in
             self._drff = self._get_drff(d_in)
             self.c = pysqrt(1.0 / self._drff)
+            resample = True
 
         if sigma is not None:
             self._sigma = sigma
+            self.sample_weights()
+            return
 
-        self.w = self.sampler()
+        if resample:
+            self.sample_weights()
 
     def __call__(self, x: torch.Tensor, batch: int | None = None) -> torch.Tensor:
         if batch is None:
-            x = x.to(device=self.w.device)
-            return self.map(x).cpu()
+            return self.map(x)
 
         return self.batched_map(x, batch)
+
+    def sample_weights(self):
+        self.w = self.sampler()
 
 
 def median_sigma(

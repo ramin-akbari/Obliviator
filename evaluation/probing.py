@@ -1,6 +1,5 @@
 from dataclasses import field
 
-import numpy as np
 import torch
 import torch.nn as tnn
 from torch.utils.data import DataLoader, TensorDataset
