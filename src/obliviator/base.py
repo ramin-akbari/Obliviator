@@ -8,7 +8,7 @@ from tqdm import trange
 
 from .schemas import UnsupervisedConfig
 from .utils.kernel import RandomFourierFeature, median_sigma
-from .utils.linalg import batched_matmul, cross_cov
+from .utils.linalg import batched_matmul, cross_cov, null_supervised_pca
 from .utils.misc import mlp_factory, optim_factory
 
 NUM_THREADS = 8
@@ -148,6 +148,50 @@ class Obliviator(ABC):
             self.x_test.div_(self.x_test.norm(dim=1, keepdim=True))
         return x
 
+    def null_dim_reduction(self, tol: float) -> tuple[torch.Tensor, torch.Tensor]:
+        # map input with RFF
+        x = self.phi_x(self.x, self.matmul_batch)
+        self.x_test = self.phi_x(self.x_test, self.matmul_batch)
+
+        # perfoming KPCA/SKPCA [depending on erasure scheme] in the null space of Csx
+        f = self._dim_reduction(x, tol)
+
+        # update input and test
+        self.x = self.update_and_project(f, x, normalize=True)
+
+        # update RFF map
+        self.phi_x.change_params(
+            d_in=f.shape[1], sigma=median_sigma(self.x, self.sigma_min_x)
+        )
+
+        # update Encoder Parameters
+        self.update_encoder(f.shape[1], self.encoder_config.hidden_dim)
+        return self.x, self.x_test
+
+    def _train_encoder(
+        self,
+        data_list: list[torch.Tensor],
+        map_list: list[RandomFourierFeature],
+        taus: list[float],
+        epochs: int,
+    ) -> None:
+        # first element is the input to the encoder
+        z = data_list[0]
+
+        # cache rff map if resampling is false for faster training
+        cached, cached_taus, not_cached, taus, map_list = self._cache_rff(
+            data_list, map_list, taus
+        )
+
+        # reordering inputs [cached, uncached, z, s]
+        n_cached = len(cached)
+        data_list = cached + not_cached
+        data_list.append(z)
+        data_list.append(self.s)
+
+        # train encoder
+        self._train(data_list, map_list, cached_taus, taus, n_cached, epochs)
+
     def _train(
         self,
         data_list: list[torch.Tensor],
@@ -169,6 +213,7 @@ class Obliviator(ABC):
                 rvs = [rv.to(self.device, non_blocking=True) for rv in rvs]
                 w = self._rff_encoder_embeddings(z)
 
+                # s is already cached
                 hs_s = cross_cov(w, s).square().mean().sqrt()
 
                 hs_p = torch.tensor(0.0, device=self.device)
@@ -191,6 +236,37 @@ class Obliviator(ABC):
                     map.sample_weights()
 
         return
+
+    def _solve_evp(
+        self,
+        data_list: list[torch.Tensor],
+        phi_list: list[RandomFourierFeature],
+        tau_list: list[float],
+        tol: float,
+    ) -> torch.Tensor:
+        # first element should always be the input to the encoder
+        # map input and test data
+        w = self.get_embeddings(data_list[0], self.encoder_batch)
+        self.x_test = self.get_embeddings(self.x_test, self.encoder_batch)
+
+        # update RFF map
+        self.phi.change_params(sigma=median_sigma(w, self.sigma_min))
+
+        # map encoder's output using RFF
+        w = self.phi(w, self.matmul_batch)
+        self.x_test = self.phi(self.x_test, self.matmul_batch)
+
+        # map data_list
+        evp_data = [
+            phi(var, self.matmul_batch) for var, phi in zip(data_list, phi_list)
+        ]
+
+        # solve the SKPCA (EVP in the paper) in the nullspace of Csx
+        f = null_supervised_pca(
+            w, evp_data, tau_list, self.s, self.device, self.matmul_batch, rtol=tol
+        )
+
+        return self.update_and_project(f, w, True)
 
     def _cache_rff(
         self,
@@ -222,11 +298,17 @@ class Obliviator(ABC):
         return cached, cached_tau, not_cached, not_cached_tau, not_cached_map
 
     @abstractmethod
-    def null_dim_reduction(self, tol: float) -> tuple[torch.Tensor, torch.Tensor]:
+    def _dim_reduction(self, x: torch.Tensor, tol: float) -> torch.Tensor:
         pass
 
     @abstractmethod
     def init_erasure(
         self, tol: float, epochs: int
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        pass
+
+    @abstractmethod
+    def erasure_step(
+        self, z: torch.Tensor, tol: float, epochs: int, update_x: bool = False
+    ):
         pass

@@ -85,8 +85,8 @@ def find_null_sx(
 
 def null_supervised_pca(
     x: torch.Tensor,
-    rvs: tuple[torch.Tensor, ...],
-    taus: tuple[float, ...],
+    rvs: list[torch.Tensor],
+    taus: list[float],
     s: torch.Tensor,
     device: torch.device,
     batch: int | None = None,
