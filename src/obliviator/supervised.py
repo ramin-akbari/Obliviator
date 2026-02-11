@@ -43,3 +43,23 @@ class Supervised(Unsupervised):
         return null_supervised_pca(
             x, data_list, tau_list, self.s, self.device, self.matmul_batch, rtol=tol
         )
+
+    @override
+    def _cache_rff(
+        self,
+        data_list: list[torch.Tensor],
+        phi_list: list[RandomFourierFeature],
+        tau_list: list[float],
+    ) -> tuple[
+        list[torch.Tensor],
+        list[float],
+        list[torch.Tensor],
+        list[float],
+        list[RandomFourierFeature],
+    ]:
+        # we just need to add y to the cached RVs
+        cached, cached_taus, not_cached, not_cached_taus, not_cached_phi = (
+            super()._cache_rff(data_list, phi_list, tau_list)
+        )
+        cached.append(self.y)
+        return cached, cached_taus, not_cached, not_cached_taus, not_cached_phi

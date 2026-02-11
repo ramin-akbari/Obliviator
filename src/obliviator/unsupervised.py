@@ -135,7 +135,7 @@ class Unsupervised:
         tau_list = [self.tau_z, self.tau_x]
         evptau_list = [self.evptau_z, self.evptau_x]
 
-        # perform erasure : encoder + evp
+        # Obliviator iterative erasure : encoder + evp
         z_new = self._obliviator_step(
             data_list, phi_list, tau_list, evptau_list, epochs, tol
         )
@@ -160,6 +160,8 @@ class Unsupervised:
     ) -> torch.Tensor:
         self._train_encoder(data_list, phi_list, tau_list, epochs)
         z = self._solve_evp(data_list, phi_list, evptau_list, tol)
+
+        # intermediate rv is updated, so we update encoder and RFF
         self._update_encoder(z.shape[1])
         self.phi_z.change_params(
             d_in=z.shape[1], sigma=median_sigma(z, self.sigma_min_z)
@@ -197,11 +199,12 @@ class Unsupervised:
 
         return self._update_and_project(f, w, True)
 
-    # update encoder for iterative erasure
+    # update encoder after each iteration of erasure
     def _update_encoder(self, in_dim: int) -> None:
         self.encoder_config.input_dim = in_dim
         self.encoder = mlp_factory(self.encoder_config)
 
+    # to change encoder architecture
     def change_encoder(self, config: MLPConfig) -> None:
         if config != self.encoder_config:
             self.encoder_config = config
@@ -242,6 +245,8 @@ class Unsupervised:
         list[float],
         list[RandomFourierFeature],
     ]:
+        # Cache RFF for those RVs that doesn't require
+        # resampling for more efficient training
         cached = []
         cached_tau = []
         not_cached = []
@@ -263,7 +268,7 @@ class Unsupervised:
         self,
         data_list: list[torch.Tensor],
         phi_list: list[RandomFourierFeature],
-        taus: list[float],
+        tau_list: list[float],
     ) -> tuple[
         list[torch.Tensor], list[RandomFourierFeature], list[float], list[float], int
     ]:
@@ -272,7 +277,7 @@ class Unsupervised:
 
         # cache rff map if resampling is false for faster training
         cached, cached_taus, not_cached, not_cached_taus, not_cached_phi = (
-            self._cache_rff(data_list, phi_list, taus)
+            self._cache_rff(data_list, phi_list, tau_list)
         )
 
         # reordering inputs [cached, uncached, z, s]
@@ -309,7 +314,6 @@ class Unsupervised:
         tau_list: list[float],
         epochs: int,
     ):
-
         processed, not_cached_phi, cached_taus, not_cached_taus, n_cached = (
             self._prepare_data(data_list, phi_list, tau_list)
         )
@@ -334,7 +338,7 @@ class Unsupervised:
                 for tau, rv in zip(cached_taus, rvs[:n_cached]):
                     hs_p = hs_p + cross_cov(w, rv).square().mean().sqrt().mul(tau)
 
-                # HSIC for not_cached inputs
+                # HSIC for the not_cached inputs
                 for tau, phi, rv in zip(
                     not_cached_taus, not_cached_phi, rvs[n_cached:]
                 ):
