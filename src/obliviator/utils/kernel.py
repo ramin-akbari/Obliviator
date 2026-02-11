@@ -31,12 +31,12 @@ class RandomFourierFeature:
         self.c = pysqrt(1.0 / self._drff)
         self.resample = resample
 
-    def map(self, x: torch.Tensor) -> torch.Tensor:
+    def _map(self, x: torch.Tensor) -> torch.Tensor:
         xd = x.to(device=self.w.device)
         rff = xd @ self.w
         return torch.cat([rff.sin(), rff.cos()], dim=1).mul(self.c).to(device=x.device)
 
-    def batched_map(self, x: torch.Tensor, batch: int) -> torch.Tensor:
+    def _batched_map(self, x: torch.Tensor, batch: int) -> torch.Tensor:
         feature = []
         for xb in torch.split(x, batch):
             xb = xb.to(device=self.w.device)
@@ -67,9 +67,9 @@ class RandomFourierFeature:
 
     def __call__(self, x: torch.Tensor, batch: int | None = None) -> torch.Tensor:
         if batch is None:
-            return self.map(x)
+            return self._map(x)
 
-        return self.batched_map(x, batch)
+        return self._batched_map(x, batch)
 
     def sample_weights(self):
         self.w = self.sampler()
