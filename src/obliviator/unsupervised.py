@@ -117,6 +117,7 @@ class Unsupervised:
     def init_erasure(
         self, tol: float, epochs: int
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        # The very first step for erasure
         data_list = [self.x]
         phi_list = [self.phi_x]
         tau_list = [self.tau_x]
@@ -129,7 +130,7 @@ class Unsupervised:
     def erasure_step(
         self, z: torch.Tensor, tol: float, epochs: int, update_x: bool = False
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        # prepare data for erasure
+        # Normal step (intermediate) for erasure
         data_list = [z, self.x]
         phi_list = [self.phi_z, self.phi_x]
         tau_list = [self.tau_z, self.tau_x]
@@ -149,6 +150,9 @@ class Unsupervised:
             )
         return z_new, self.x_test
 
+    def _dim_reduction(self, x: torch.Tensor, tol: float) -> torch.Tensor:
+        return null_pca(x, self.s, self.device, self.matmul_batch, rtol=tol)
+
     def _obliviator_step(
         self,
         data_list: list[torch.Tensor],
@@ -158,8 +162,10 @@ class Unsupervised:
         epochs: int,
         tol: float,
     ) -> torch.Tensor:
-        self._train_encoder(data_list, phi_list, tau_list, epochs)
-        z = self._solve_evp(data_list, phi_list, evptau_list, tol)
+        out_tuple = self._prepare_data(data_list, phi_list, tau_list, evptau_list)
+        self._train_encoder(*out_tuple[:-2], epochs)
+        evptau_list_processed = out_tuple[-1] + out_tuple[-2]
+        z = self._solve_evp(*out_tuple[:3], evptau_list_processed, tol)
 
         # intermediate rv is updated, so we update encoder and RFF
         self._update_encoder(z.shape[1])
@@ -168,19 +174,61 @@ class Unsupervised:
         )
         return z
 
+    def _train_encoder(
+        self,
+        processed_data: list[torch.Tensor],
+        n_cached: int,
+        active_phi: list[RandomFourierFeature],
+        cached_taus: list[float],
+        not_cached_taus: list[float],
+        epochs: int,
+    ):
+        data = self.loader(TensorDataset(*processed_data, self.s))
+        optimizer = self.optim_factory(self.encoder.parameters())
+        pbar = trange(epochs)
+
+        for _ in pbar:
+            for *rvs, z, s in data:
+                optimizer.zero_grad()
+                s = s.to(self.device, non_blocking=True)
+                z = z.to(self.device, non_blocking=True)
+                rvs = [rv.to(self.device, non_blocking=True) for rv in rvs]
+                w = self._rff_encoder_embeddings(z)
+
+                # s is already cached
+                hs_s = cross_cov(w, s).square().mean().sqrt()
+
+                hs_p = torch.tensor(0.0, device=self.device)
+
+                # HSIC for cached inputs, we normalize HSIC based on the dimension of RVs
+                for tau, rv in zip(cached_taus, rvs[:n_cached]):
+                    hs_p = hs_p + cross_cov(w, rv).square().mean().sqrt().mul(tau)
+
+                # HSIC for the not_cached inputs
+                for tau, phi, rv in zip(not_cached_taus, active_phi, rvs[n_cached:]):
+                    hs_p = hs_p + cross_cov(w, phi(rv)).square().mean().sqrt().mul(tau)
+
+                loss = hs_s - hs_p
+                loss.backward()
+                optimizer.step()
+
+            # resample active RFF weights for the next epoch
+            for phi in active_phi:
+                phi.sample_weights()
+
     def _solve_evp(
         self,
-        data_list: list[torch.Tensor],
-        phi_list: list[RandomFourierFeature],
-        tau_list: list[float],
+        processed_data: list[torch.Tensor],
+        n_cached: int,
+        active_phi: list[RandomFourierFeature],
+        evptau_list: list[float],
         tol: float,
     ) -> torch.Tensor:
-        # first element should always be the input to the encoder
-        # map input and test data
-        w = self._get_embeddings(data_list[0], self.encoder_batch)
+        # for the processed data after caching we put z as the last element
+        w = self._get_embeddings(processed_data[-1], self.encoder_batch)
         self.x_test = self._get_embeddings(self.x_test, self.encoder_batch)
 
-        # update RFF map (not necessary)
+        # update RFF map (not really necessary)
         self.phi.change_params(sigma=median_sigma(w, self.sigma_min))
 
         # map encoder's output using RFF
@@ -189,12 +237,15 @@ class Unsupervised:
 
         # map data_list
         evp_data = [
-            phi(var, self.matmul_batch) for var, phi in zip(data_list, phi_list)
+            phi(var, self.matmul_batch)
+            for var, phi in zip(processed_data[n_cached:], active_phi)
         ]
+
+        evp_data.extend(processed_data[:n_cached])
 
         # solve the SKPCA (EVP in the paper) in the nullspace of Csx
         f = null_supervised_pca(
-            w, evp_data, tau_list, self.s, self.device, self.matmul_batch, rtol=tol
+            w, evp_data, evptau_list, self.s, self.device, self.matmul_batch, rtol=tol
         )
 
         return self._update_and_project(f, w, True)
@@ -230,63 +281,80 @@ class Unsupervised:
             self.x_test.div_(self.x_test.norm(dim=1, keepdim=True))
         return x
 
-    def _dim_reduction(self, x: torch.Tensor, tol: float) -> torch.Tensor:
-        return null_pca(x, self.s, self.device, self.matmul_batch, rtol=tol)
-
     def _cache_rff(
         self,
         data_list: list[torch.Tensor],
         phi_list: list[RandomFourierFeature],
         tau_list: list[float],
+        evptau_list: list[float],
     ) -> tuple[
         list[torch.Tensor],
-        list[float],
         list[torch.Tensor],
-        list[float],
         list[RandomFourierFeature],
+        list[float],
+        list[float],
+        list[float],
+        list[float],
     ]:
-        # Cache RFF for those RVs that doesn't require
+        # cache RFF for those RVs that doesn't require
         # resampling for more efficient training
-        cached = []
-        cached_tau = []
-        not_cached = []
-        not_cached_phi = []
-        not_cached_tau = []
+        cached: list[torch.Tensor] = []
+        not_cached: list[torch.Tensor] = []
+        cached_tau: list[float] = []
+        not_cached_tau: list[float] = []
+        cached_evptau: list[float] = []
+        not_cached_evptau: list[float] = []
+        not_cached_phi: list[RandomFourierFeature] = []
 
-        for map, data, tau in zip(phi_list, data_list, tau_list):
+        for map, data, tau, evptau in zip(phi_list, data_list, tau_list, evptau_list):
             if not map.resample:
                 cached.append(map(data, self.matmul_batch))
                 cached_tau.append(tau)
+                cached_evptau.append(evptau)
             else:
                 not_cached.append(data)
                 not_cached_phi.append(map)
                 not_cached_tau.append(tau)
+                not_cached_evptau.append(evptau)
 
-        return cached, cached_tau, not_cached, not_cached_tau, not_cached_phi
+        return (
+            cached,
+            not_cached,
+            not_cached_phi,
+            cached_tau,
+            not_cached_tau,
+            cached_evptau,
+            not_cached_evptau,
+        )
 
     def _prepare_data(
         self,
         data_list: list[torch.Tensor],
         phi_list: list[RandomFourierFeature],
         tau_list: list[float],
+        evptau_list: list[float],
     ) -> tuple[
-        list[torch.Tensor], list[RandomFourierFeature], list[float], list[float], int
+        list[torch.Tensor],
+        int,
+        list[RandomFourierFeature],
+        list[float],
+        list[float],
+        list[float],
+        list[float],
     ]:
         # first element is the input to the encoder
         z = data_list[0]
 
         # cache rff map if resampling is false for faster training
-        cached, cached_taus, not_cached, not_cached_taus, not_cached_phi = (
-            self._cache_rff(data_list, phi_list, tau_list)
-        )
+        out_tuple = self._cache_rff(data_list, phi_list, tau_list, evptau_list)
 
-        # reordering inputs [cached, uncached, z, s]
-        n_cached = len(cached)
-        processed = cached + not_cached
+        # reordering inputs [cached[,y], uncached, z]
+        # y is present in supervised
+        n_cached = len(out_tuple[0])
+        processed = out_tuple[0] + out_tuple[1]
         processed.append(z)
-        processed.append(self.s)
 
-        return processed, not_cached_phi, cached_taus, not_cached_taus, n_cached
+        return processed, n_cached, *out_tuple[2:]
 
     def _rff_encoder_embeddings(self, z_batch: torch.Tensor) -> torch.Tensor:
         w = self.encoder(z_batch)
@@ -306,49 +374,3 @@ class Unsupervised:
             [helper(z_batched) for z_batched in torch.split(z, batch, dim=0)],
             dim=0,
         )
-
-    def _train_encoder(
-        self,
-        data_list: list[torch.Tensor],
-        phi_list: list[RandomFourierFeature],
-        tau_list: list[float],
-        epochs: int,
-    ):
-        processed, not_cached_phi, cached_taus, not_cached_taus, n_cached = (
-            self._prepare_data(data_list, phi_list, tau_list)
-        )
-        data = self.loader(TensorDataset(*processed))
-        optimizer = self.optim_factory(self.encoder.parameters())
-        pbar = trange(epochs)
-
-        for _ in pbar:
-            for *rvs, z, s in data:
-                optimizer.zero_grad()
-                s = s.to(self.device, non_blocking=True)
-                z = z.to(self.device, non_blocking=True)
-                rvs = [rv.to(self.device, non_blocking=True) for rv in rvs]
-                w = self._rff_encoder_embeddings(z)
-
-                # s is already cached
-                hs_s = cross_cov(w, s).square().mean().sqrt()
-
-                hs_p = torch.tensor(0.0, device=self.device)
-
-                # HSIC for cached inputs, we normalize HSIC based on the dimension of RVs
-                for tau, rv in zip(cached_taus, rvs[:n_cached]):
-                    hs_p = hs_p + cross_cov(w, rv).square().mean().sqrt().mul(tau)
-
-                # HSIC for the not_cached inputs
-                for tau, phi, rv in zip(
-                    not_cached_taus, not_cached_phi, rvs[n_cached:]
-                ):
-                    hs_p = hs_p + cross_cov(w, phi(rv)).square().mean().sqrt().mul(tau)
-
-                loss = hs_s - hs_p
-                loss.backward()
-                optimizer.step()
-
-            # resample RFF weights
-            for phi in phi_list:
-                if phi.resample:
-                    phi.sample_weights()

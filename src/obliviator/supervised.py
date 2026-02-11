@@ -50,16 +50,36 @@ class Supervised(Unsupervised):
         data_list: list[torch.Tensor],
         phi_list: list[RandomFourierFeature],
         tau_list: list[float],
+        evptau_list: list[float],
     ) -> tuple[
         list[torch.Tensor],
-        list[float],
         list[torch.Tensor],
-        list[float],
         list[RandomFourierFeature],
+        list[float],
+        list[float],
+        list[float],
+        list[float],
     ]:
-        # we just need to add y to the cached RVs
-        cached, cached_taus, not_cached, not_cached_taus, not_cached_phi = (
-            super()._cache_rff(data_list, phi_list, tau_list)
-        )
+        (
+            cached,
+            not_cached,
+            not_cached_phi,
+            cached_tau,
+            not_cached_tau,
+            cached_evptau,
+            not_cached_evptau,
+        ) = super()._cache_rff(data_list, phi_list, tau_list, evptau_list)
+
         cached.append(self.y)
-        return cached, cached_taus, not_cached, not_cached_taus, not_cached_phi
+        cached_tau.append(self.tau_y)
+        cached_evptau.append(self.evptau_y)
+
+        return (
+            cached,
+            not_cached,
+            not_cached_phi,
+            cached_tau,
+            not_cached_tau,
+            cached_evptau,
+            not_cached_evptau,
+        )
