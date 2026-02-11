@@ -37,8 +37,8 @@ class Unsupervised:
 
         self.tau_x = config.tau_x
         self.tau_z = config.tau_z
-        self.evptau_x = config.tau_x
-        self.evptau_z = config.tau_z
+        self.evptau_x = config.evp_tau_x
+        self.evptau_z = config.evp_tau_z
 
         self.encoder_config = config.encoder_config
         self.encoder = torch.nn.Identity()
