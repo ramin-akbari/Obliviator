@@ -1,9 +1,12 @@
+from typing import override
+
 import numpy as np
 import torch
 
 from .schemas import SupervisedConfig
 from .unsupervised import Unsupervised
 from .utils.kernel import RandomFourierFeature, median_sigma
+from .utils.linalg import null_supervised_pca
 
 
 class Supervised(Unsupervised):
@@ -32,3 +35,11 @@ class Supervised(Unsupervised):
                 self.device,
             )
             self.y = phi_y(self.y, self.matmul_batch)
+
+    @override
+    def _dim_reduction(self, x: torch.Tensor, tol: float) -> torch.Tensor:
+        data_list = [x, self.y]
+        tau_list = [self.tau_x, self.tau_y]
+        return null_supervised_pca(
+            x, data_list, tau_list, self.s, self.device, self.matmul_batch, rtol=tol
+        )
