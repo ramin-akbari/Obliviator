@@ -1,11 +1,11 @@
 import numpy as np
 import torch
 
-from .base import Obliviator
 from .schemas import SupervisedConfig
+from .unsupervised import Unsupervised
 
 
-class Supervised(Obliviator):
+class Supervised(Unsupervised):
     def __init__(
         self,
         x: torch.Tensor | np.ndarray,

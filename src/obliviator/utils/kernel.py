@@ -48,20 +48,21 @@ class RandomFourierFeature:
         self,
         d_in: int | None = None,
         sigma: float | None = None,
+        do_resample: bool = True,
     ) -> None:
-        resample = False
+        is_changed = False
         if d_in is not None and d_in != self._d_in:
             self._d_in = d_in
             self._drff = self._get_drff(d_in)
             self.c = pysqrt(1.0 / self._drff)
-            resample = True
+            is_changed = True
 
         if sigma is not None:
             self._sigma = sigma
             self.sample_weights()
             return
 
-        if resample:
+        if do_resample and is_changed:
             self.sample_weights()
 
     def __call__(self, x: torch.Tensor, batch: int | None = None) -> torch.Tensor:
