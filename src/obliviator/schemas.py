@@ -75,5 +75,6 @@ class SupervisedConfig(UnsupervisedConfig):
     tau_y: float = 2.5
     evp_tau_y: float = 2.5
     use_rff_y: bool = False
-    sigma_y_max: float = 1
-    resamle_rff_weights_y: bool = False
+    sigma_min_y: float = 1
+    drff_min_y: int = 50
+    rff_scale_y: int = 5

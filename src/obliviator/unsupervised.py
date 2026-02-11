@@ -37,6 +37,8 @@ class Unsupervised:
 
         self.tau_x = config.tau_x
         self.tau_z = config.tau_z
+        self.evptau_x = config.tau_x
+        self.evptau_z = config.tau_z
 
         self.encoder_config = config.encoder_config
         self.encoder = torch.nn.Identity()
@@ -65,9 +67,9 @@ class Unsupervised:
             config.rff_scale_z,
             config.drff_max,
             config.drff_min,
-            median_sigma(x, config.sigma_min_z),
-            config.resample_z,
-            self.device,
+            sigma_rff=1.0,
+            resample=config.resample_z,
+            device=self.device,
         )
 
         self.phi = RandomFourierFeature(
@@ -75,9 +77,9 @@ class Unsupervised:
             config.rff_scale,
             config.drff_max,
             config.drff_min,
-            median_sigma(x, config.sigma_min),
-            False,
-            self.device,
+            sigma_rff=1.0,
+            resample=False,
+            device=self.device,
         )
 
         if config.use_rff_s:
@@ -86,7 +88,7 @@ class Unsupervised:
                 config.rff_scale_s,
                 config.drff_max,
                 config.drff_min_s,
-                median_sigma(x, config.sigma_min_s),
+                median_sigma(s, config.sigma_min_s),
                 False,
                 self.device,
             )
@@ -118,7 +120,10 @@ class Unsupervised:
         data_list = [self.x]
         phi_list = [self.phi_x]
         tau_list = [self.tau_x]
-        z = self._obliviator_step(data_list, phi_list, tau_list, epochs, tol)
+        evptau_list = [self.evptau_x]
+        z = self._obliviator_step(
+            data_list, phi_list, tau_list, evptau_list, epochs, tol
+        )
         return z, self.x_test
 
     def erasure_step(
@@ -126,11 +131,14 @@ class Unsupervised:
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # prepare data for erasure
         data_list = [z, self.x]
-        phi_list = [self.phi, self.phi_x]
+        phi_list = [self.phi_z, self.phi_x]
         tau_list = [self.tau_z, self.tau_x]
+        evptau_list = [self.evptau_z, self.evptau_x]
 
         # perform erasure : encoder + evp
-        z_new = self._obliviator_step(data_list, phi_list, tau_list, epochs, tol)
+        z_new = self._obliviator_step(
+            data_list, phi_list, tau_list, evptau_list, epochs, tol
+        )
 
         # if we want to update x with the current RV
         if update_x:
@@ -146,12 +154,16 @@ class Unsupervised:
         data_list: list[torch.Tensor],
         phi_list: list[RandomFourierFeature],
         tau_list: list[float],
+        evptau_list: list[float],
         epochs: int,
         tol: float,
     ) -> torch.Tensor:
         self._train_encoder(data_list, phi_list, tau_list, epochs)
-        z = self._solve_evp(data_list, phi_list, tau_list, tol)
+        z = self._solve_evp(data_list, phi_list, evptau_list, tol)
         self._update_encoder(z.shape[1])
+        self.phi_z.change_params(
+            d_in=z.shape[1], sigma=median_sigma(z, self.sigma_min_z)
+        )
         return z
 
     def _solve_evp(
