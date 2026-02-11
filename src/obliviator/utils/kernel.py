@@ -85,10 +85,4 @@ def median_sigma(
     if x.shape[0] > max_sample:
         x = x[torch.randperm(x.shape[0], device=x.device)[:max_sample]]
 
-    n = x.shape[0]
-    sigma = (
-        torch.cdist(x, x)[*torch.triu_indices(n, n, offset=1, device=x.device)]
-        .median()
-        .item()
-    )
-    return max(alpha * sigma, sigma_min)
+    return max(alpha * torch.pdist(x).median().item(), sigma_min)
