@@ -3,7 +3,11 @@ from functools import partial
 import torch.nn as tnn
 import torch.optim as topt
 
-from obliviator.schemas import ActivationType, MLPConfig, OptimConfig
+from obliviator.schemas import (
+    ActivationType,
+    MLPConfig,
+    OptimConfig,
+)
 
 
 def get_activation(act_type: ActivationType) -> tnn.Module:
