@@ -1,11 +1,10 @@
 from functools import partial
 
-import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import trange
 
-from .schemas import MLPConfig, UnsupervisedConfig
+from .schemas import MLPConfig, UnsupervisedConfig, UnsupervisedData
 from .utils.kernel import RandomFourierFeature, median_sigma
 from .utils.linalg import batched_matmul, cross_cov, null_pca, null_supervised_pca
 from .utils.misc import mlp_factory, optim_factory
@@ -17,15 +16,13 @@ DRFF_SCALE: int = 4
 class Unsupervised:
     def __init__(
         self,
-        x: torch.Tensor | np.ndarray,
-        s: torch.Tensor | np.ndarray,
-        x_test: torch.Tensor | np.ndarray,
+        data: UnsupervisedData,
         config: UnsupervisedConfig,
         dtype: torch.dtype = torch.float32,
     ) -> None:
-        self.x = torch.as_tensor(x, dtype=dtype)
-        self.s = torch.as_tensor(s, dtype=dtype)
-        self.x_test = torch.as_tensor(x_test, dtype=dtype)
+        self.x = torch.as_tensor(data.x, dtype=dtype)
+        self.s = torch.as_tensor(data.s, dtype=dtype)
+        self.x_test = torch.as_tensor(data.x_test, dtype=dtype)
 
         self.sigma_min = config.sigma_min
         self.sigma_min_z = config.sigma_min_z
@@ -53,11 +50,11 @@ class Unsupervised:
             drop_last=True,
         )
         self.phi_x = RandomFourierFeature(
-            x.shape[1],
+            self.x.shape[1],
             config.rff_scale_x,
             config.drff_max,
             config.drff_min,
-            median_sigma(x, config.sigma_min_x),
+            median_sigma(self.x, config.sigma_min_x),
             config.resample_x,
             self.device,
         )
@@ -84,15 +81,15 @@ class Unsupervised:
 
         if config.use_rff_s:
             phi_s = RandomFourierFeature(
-                s.shape[1],
+                self.s.shape[1],
                 config.rff_scale_s,
                 config.drff_max,
                 config.drff_min_s,
-                median_sigma(s, config.sigma_min_s),
+                median_sigma(self.s, config.sigma_min_s),
                 False,
                 self.device,
             )
-            s = phi_s(self.s, self.matmul_batch)
+            self.s = phi_s(self.s, self.matmul_batch)
 
     def null_dim_reduction(self, tol: float) -> tuple[torch.Tensor, torch.Tensor]:
         # map input with RFF

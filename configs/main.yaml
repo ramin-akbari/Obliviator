@@ -1,7 +1,0 @@
-defaults:
-  - _self_
-  - experiments: ${model}/${mode}/${dataset}
-
-model: deepseek
-mode: supervised
-dataset: bios

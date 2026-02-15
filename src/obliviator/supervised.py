@@ -1,9 +1,8 @@
 from typing import override
 
-import numpy as np
 import torch
 
-from .schemas import SupervisedConfig
+from .schemas import SupervisedConfig, SupervisedData
 from .unsupervised import Unsupervised
 from .utils.kernel import RandomFourierFeature, median_sigma
 from .utils.linalg import null_supervised_pca
@@ -12,25 +11,22 @@ from .utils.linalg import null_supervised_pca
 class Supervised(Unsupervised):
     def __init__(
         self,
-        x: torch.Tensor | np.ndarray,
-        s: torch.Tensor | np.ndarray,
-        y: torch.Tensor | np.ndarray,
-        x_test: torch.Tensor | np.ndarray,
+        data: SupervisedData,
         config: SupervisedConfig,
         dtype: torch.dtype = torch.float32,
     ) -> None:
-        super().__init__(x, s, x_test, config, dtype)
-        self.y = torch.as_tensor(y, dtype=dtype)
+        super().__init__(data, config, dtype)
+        self.y = torch.as_tensor(data.y, dtype=dtype)
         self.tau_y = config.tau_y
         self.evptau_y = config.evp_tau_y
 
         if config.use_rff_y:
             phi_y = RandomFourierFeature(
-                y.shape[1],
+                self.y.shape[1],
                 config.rff_scale_y,
                 config.drff_max,
                 config.drff_min_y,
-                median_sigma(y, config.sigma_min_y),
+                median_sigma(self.y, config.sigma_min_y),
                 False,
                 self.device,
             )

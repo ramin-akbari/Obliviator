@@ -1,19 +1,8 @@
 # single file for all experiments
-import hydra
-from hydra.core.config_store import ConfigStore
 
-cs = ConfigStore.instance()
+import tyro
 
-# cs.store(name="base_type",node=)
+from configs.schemas import InputConfig
 
-
-@hydra.main(version_base=None, config_name="main", config_path="configs")
-def main(cfg):
-
-    print(cfg.eraser_encoder.lr)
-
-    print(cfg.prob.lr)
-
-
-if __name__ == "__main__":
-    main()
+cfg = tyro.cli(InputConfig)
+print(cfg)

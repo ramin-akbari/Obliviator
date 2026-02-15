@@ -56,7 +56,7 @@ def optim_factory(config: OptimConfig) -> partial[topt.Optimizer]:
 
 def mlp_factory(
     config: MLPConfig,
-) -> tnn.Module:
+) -> tnn.Sequential:
     net = [
         tnn.Linear(config.input_dim, config.hidden_dim),
         get_activation(config.activation),
