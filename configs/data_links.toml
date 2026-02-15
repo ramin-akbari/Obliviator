@@ -1,0 +1,16 @@
+[deepseek]
+bios = { repo_id = "user/ds", filename = "ds_bios.pt" }
+
+
+[llama]
+bios = { repo_id = "user/llama", filename = "llama_bios.pt" }
+
+
+[gpt2]
+bios = { repo_id = "user/gpt2", filename = "gpt2_bios.pt" }
+
+
+[bert]
+bios = { repo_id = "user/llama", filename = "llama_bios.pt" }
+dial-men = { repo_id = "user/llama", filename = "llama_men.pt" }
+dial-sen = { repo_id = "user/llama", filename = "llama_men.pt" }

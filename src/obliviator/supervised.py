@@ -13,10 +13,9 @@ class Supervised(Unsupervised):
         self,
         data: SupervisedData,
         config: SupervisedConfig,
-        dtype: torch.dtype = torch.float32,
     ) -> None:
-        super().__init__(data, config, dtype)
-        self.y = torch.as_tensor(data.y, dtype=dtype)
+        super().__init__(data, config)
+        self.y = data.y
         self.tau_y = config.tau_y
         self.evptau_y = config.evp_tau_y
 

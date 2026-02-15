@@ -4,10 +4,10 @@ import obliviator.schemas as oblvsc
 
 
 @dataclass
-class UserUnsupConfig(oblvsc.UnsupervisedConfig):
+class UserUnsup(oblvsc.UnsupervisedConfig):
     pass
 
 
 @dataclass
-class UserSupConfig(oblvsc.SupervisedConfig):
+class UserSup(oblvsc.SupervisedConfig):
     pass

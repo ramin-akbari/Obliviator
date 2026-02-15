@@ -2,9 +2,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from numpy import ndarray
+from numpy.lib.npyio import NpzFile
+from torch import Tensor
+
 import obliviator.schemas as oblvsc
 
-from .user_defined import UserSupConfig, UserUnsupConfig
+from .user_config import UserSup, UserUnsup
 
 
 @dataclass
@@ -35,7 +39,7 @@ class BasicErasureConfig:
 class UnsupErasure(BasicErasureConfig):
     """Unsupervised Erasure Config"""
 
-    eraser: oblvsc.UnsupervisedConfig = field(default_factory=UserUnsupConfig)
+    eraser: oblvsc.UnsupervisedConfig = field(default_factory=UserUnsup)
     """Eraser Config"""
 
 
@@ -43,8 +47,9 @@ class UnsupErasure(BasicErasureConfig):
 class SupErasure(BasicErasureConfig):
     """Supervised Erasure Config"""
 
-    eraser: oblvsc.SupervisedConfig = field(default_factory=UserSupConfig)
+    eraser: oblvsc.SupervisedConfig = field(default_factory=UserSup)
     """Eraser Config"""
 
 
 InputConfig = Experiment | UnsupErasure | SupErasure
+type ErasureData = NpzFile | dict[str, Tensor] | dict[str, ndarray]

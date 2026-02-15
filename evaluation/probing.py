@@ -15,7 +15,7 @@ NUM_THREADS = 8
 MIN_TEST_BATCH = 1024
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, kw_only=True)
 class ProbingData:
     x: torch.Tensor
     y: torch.Tensor

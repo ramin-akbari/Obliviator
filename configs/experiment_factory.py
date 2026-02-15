@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 
+import torch
+
 from obliviator.schemas import (
     ActivationType,
     MLPConfig,
@@ -8,6 +10,7 @@ from obliviator.schemas import (
     UnsupervisedConfig,
 )
 
+from .data_loader import get_experimental_data
 from .schemas import Experiment
 
 
@@ -54,7 +57,6 @@ class LargeUnsup(BaseUnsup):
     sigma_min_x: float = 3
     sigma_min_z: float = 1.5
     evp_tau_x: float = 0.15
-    evp_tau_y: float = 2.5
 
 
 @dataclass
@@ -76,7 +78,12 @@ class LargeSup(BaseSup):
 
 def select_experiment(
     exp_config: Experiment,
-) -> tuple[UnsupervisedConfig, MLPConfig, OptimConfig]:
+) -> tuple[
+    UnsupervisedConfig | SupervisedConfig,
+    MLPConfig,
+    OptimConfig,
+    dict[str, torch.Tensor],
+]:
 
     match exp_config.mode:
         case "sup":
@@ -95,5 +102,6 @@ def select_experiment(
 
     mlp_classifier = DeepClassifier()
     optim_classifier = ClassifierOptim()
+    data = get_experimental_data(exp_config)
 
-    return oblv, mlp_classifier, optim_classifier
+    return oblv, mlp_classifier, optim_classifier, data

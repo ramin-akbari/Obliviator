@@ -18,11 +18,10 @@ class Unsupervised:
         self,
         data: UnsupervisedData,
         config: UnsupervisedConfig,
-        dtype: torch.dtype = torch.float32,
     ) -> None:
-        self.x = torch.as_tensor(data.x, dtype=dtype)
-        self.s = torch.as_tensor(data.s, dtype=dtype)
-        self.x_test = torch.as_tensor(data.x_test, dtype=dtype)
+        self.x = data.x
+        self.s = data.s
+        self.x_test = data.x_test
 
         self.sigma_min = config.sigma_min
         self.sigma_min_z = config.sigma_min_z
