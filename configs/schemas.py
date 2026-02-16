@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Literal
 
 from numpy import ndarray
-from numpy.lib.npyio import NpzFile
 from torch import Tensor
 
 import obliviator.schemas as oblvsc
@@ -11,7 +10,19 @@ import obliviator.schemas as oblvsc
 from .user_config import UserSup, UserUnsup
 
 
-@dataclass
+@dataclass(slots=True, kw_only=True)
+class RawData:
+    x_train: Tensor | ndarray
+    x_test: Tensor | ndarray
+    y: Tensor | ndarray
+    y_test: Tensor | ndarray
+    s: Tensor | ndarray
+    s_test: Tensor | ndarray
+    s_dev: Tensor | ndarray | None = None
+    y_dev: Tensor | ndarray | None = None
+
+
+@dataclass(slots=True)
 class Experiment:
     """For Reproducing Paper's Experiments"""
 
@@ -23,7 +34,7 @@ class Experiment:
     """Erasure Mode [sup:Supervised (with y-label) , unsup:Unsupervised] """
 
 
-@dataclass
+@dataclass(slots=True)
 class BasicErasureConfig:
     data_adr: Path
     """Directory of Dataset [x:Representations, y:Utility Attribute, s: Unwanted Atrribute]"""
@@ -35,7 +46,7 @@ class BasicErasureConfig:
     """ Probing Network Optimizer"""
 
 
-@dataclass
+@dataclass(slots=True)
 class UnsupErasure(BasicErasureConfig):
     """Unsupervised Erasure Config"""
 
@@ -43,7 +54,7 @@ class UnsupErasure(BasicErasureConfig):
     """Eraser Config"""
 
 
-@dataclass
+@dataclass(slots=True)
 class SupErasure(BasicErasureConfig):
     """Supervised Erasure Config"""
 
@@ -52,4 +63,3 @@ class SupErasure(BasicErasureConfig):
 
 
 InputConfig = Experiment | UnsupErasure | SupErasure
-type ErasureData = NpzFile | dict[str, Tensor] | dict[str, ndarray]

@@ -11,7 +11,7 @@ from obliviator.schemas import (
 )
 
 from .data_loader import get_experimental_data
-from .schemas import Experiment
+from .schemas import Experiment, RawData
 
 
 @dataclass
@@ -82,7 +82,7 @@ def select_experiment(
     UnsupervisedConfig | SupervisedConfig,
     MLPConfig,
     OptimConfig,
-    dict[str, torch.Tensor],
+    RawData,
 ]:
 
     match exp_config.mode:
@@ -102,6 +102,6 @@ def select_experiment(
 
     mlp_classifier = DeepClassifier()
     optim_classifier = ClassifierOptim()
-    data = get_experimental_data(exp_config)
+    data = RawData(**get_experimental_data(exp_config))
 
     return oblv, mlp_classifier, optim_classifier, data

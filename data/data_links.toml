@@ -1,0 +1,5 @@
+[bios]
+deepseek = { repo_id = "ramin-akbari/Obliviator_Datasets", filename = "deepseek_bios.pt" }
+llama = { repo_id = "ramin-akbari/Obliviator_Datasets", filename = "llama_bios.pt" }
+gpt2 = { repo_id = "ramin-akbari/Obliviator_Datasets", filename = "gpt2_bios.pt" }
+bert = { repo_id = "ramin-akbari/Obliviator_Datasets", filename = "bert_bios.pt" }
