@@ -1,7 +1,5 @@
 from dataclasses import dataclass, field
 
-import torch
-
 from obliviator.schemas import (
     ActivationType,
     MLPConfig,
@@ -9,9 +7,6 @@ from obliviator.schemas import (
     SupervisedConfig,
     UnsupervisedConfig,
 )
-
-from .data_loader import get_experimental_data
-from .schemas import Experiment, RawData
 
 
 @dataclass
@@ -74,34 +69,3 @@ class LargeSup(BaseSup):
     sigma_min_z: float = 1.5
     evp_tau_x: float = 0.15
     evp_tau_y: float = 2.5
-
-
-def select_experiment(
-    exp_config: Experiment,
-) -> tuple[
-    UnsupervisedConfig | SupervisedConfig,
-    MLPConfig,
-    OptimConfig,
-    RawData,
-]:
-
-    match exp_config.mode:
-        case "sup":
-            match exp_config.model:
-                case "deepseek" | "llama":
-                    oblv = LargeSup()
-                case "gpt2" | "bert":
-                    oblv = BaseSup()
-
-        case "unsup":
-            match exp_config.model:
-                case "deepseek" | "llama":
-                    oblv = LargeUnsup()
-                case "gpt2" | "bert":
-                    oblv = BaseUnsup()
-
-    mlp_classifier = DeepClassifier()
-    optim_classifier = ClassifierOptim()
-    data = RawData(**get_experimental_data(exp_config))
-
-    return oblv, mlp_classifier, optim_classifier, data

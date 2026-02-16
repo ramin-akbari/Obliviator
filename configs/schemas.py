@@ -7,19 +7,30 @@ from torch import Tensor
 
 import obliviator.schemas as oblvsc
 
-from .user_config import UserSup, UserUnsup
+from .user import UserSup, UserUnsup
 
 
 @dataclass(slots=True, kw_only=True)
 class RawData:
+    "A DataClass to standardize input data"
+
     x_train: Tensor | ndarray
+    "Learned representation used for training"
+
     x_test: Tensor | ndarray
+    "Learned representation used for testing"
+
     y: Tensor | ndarray
+    "Utility label correponding to train representation"
+
     y_test: Tensor | ndarray
+    "Utility label correponding to test representation"
+
     s: Tensor | ndarray
+    "Unwanted label correponding to train representation"
+
     s_test: Tensor | ndarray
-    s_dev: Tensor | ndarray | None = None
-    y_dev: Tensor | ndarray | None = None
+    "Unwanted label correponding to test representation"
 
 
 @dataclass(slots=True)

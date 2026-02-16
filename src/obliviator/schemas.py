@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 from enum import StrEnum, auto
-from typing import Any
 
 import numpy as np
 import torch
@@ -132,31 +131,37 @@ class SupervisedConfig(UnsupervisedConfig):
     """Scale Factor for Random Fourier Features for RV [y]"""
 
 
-@dataclass(slots=True, kw_only=True)
+@dataclass(slots=True)
 class UnsupervisedData:
     x: torch.Tensor
     s: torch.Tensor
     x_test: torch.Tensor
-    dtype: torch.dtype = torch.float32
 
-    def __post_init__(self):
-        self.x = self._helper(self.x, self.dtype)
-        self.x_test = self._helper(self.x_test, self.dtype)
-        self.s = self._helper(self.s, self.dtype)
-
-    @staticmethod
-    def _helper(data: Any, data_type: torch.dtype) -> torch.Tensor:
-        if not isinstance(data, (torch.Tensor, np.ndarray, list)):
-            raise ValueError(
-                "Input must either a torch tensor, numpy array or python list"
-            )
-        return torch.as_tensor(data, dtype=data_type)
+    def __init__(
+        self,
+        *,
+        x: torch.Tensor | np.ndarray,
+        s: torch.Tensor | np.ndarray,
+        x_test: torch.Tensor | np.ndarray,
+        dtype: torch.dtype = torch.float32,
+    ):
+        self.x = torch.as_tensor(x, dtype=dtype)
+        self.x_test = torch.as_tensor(x_test, dtype=dtype)
+        self.s = torch.as_tensor(s, dtype=dtype)
 
 
-@dataclass(slots=True, kw_only=True)
+@dataclass(slots=True)
 class SupervisedData(UnsupervisedData):
     y: torch.Tensor
 
-    def __post_init__(self):
-        super().__post_init__()
-        self.y = self._helper(self.y, self.dtype)
+    def __init__(
+        self,
+        *,
+        x: torch.Tensor | np.ndarray,
+        s: torch.Tensor | np.ndarray,
+        x_test: torch.Tensor | np.ndarray,
+        y: torch.Tensor | np.ndarray,
+        dtype: torch.dtype = torch.float32,
+    ):
+        super().__init__(x=x, s=s, x_test=x_test, dtype=dtype)
+        self.s = torch.as_tensor(s, dtype=dtype)
