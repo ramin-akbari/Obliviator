@@ -1,20 +1,14 @@
 from dataclasses import dataclass, field
-from functools import partial
 
 import numpy as np
 import torch
 import torch.nn as tnn
-from torch.utils.data import DataLoader, TensorDataset
-from tqdm import tqdm, trange
+from tqdm import trange
 
 from obliviator.schemas import MLPConfig, OptimConfig
 from obliviator.utils.misc import mlp_factory, optim_factory
 
-NUM_THREADS = 16
-MIN_TEST_BATCH = 2048
 
-
-@dataclass(slots=True)
 class ProbData:
     x: torch.Tensor
     y: torch.Tensor
@@ -46,15 +40,14 @@ class ProbConfig:
 
 class MLPCrossEntropy:
     def __init__(self, data: ProbData, config: ProbConfig) -> None:
-        self.x = data.x
-        self.y = data.y
-        self.x_test = data.x_test
-        self.y_test = data.y_test
+        self.x = data.x.pin_memory()
+        self.y = data.y.pin_memory()
+        self.x_test = data.x_test.pin_memory()
+        self.y_test = data.y_test.pin_memory()
         self.device = torch.device(config.device)
         self.max_acc = 0
         self.mlp_config = config.mlp_config
 
-        self.test_batch = max(config.optim_config.batch_size, MIN_TEST_BATCH)
         config.mlp_config.input_dim = data.x.shape[1]
         config.mlp_config.out_dim = int(data.y.max().item()) + 1
 
@@ -65,23 +58,23 @@ class MLPCrossEntropy:
         self.optimizer = optim_factory(config.optim_config)
         self.train_batch = config.optim_config.batch_size
 
-        self.loader = partial(
-            DataLoader,
-            shuffle=True,
-            drop_last=True,
-            num_workers=NUM_THREADS,
-            pin_memory=True,
-        )
-
     def train(self, epoch: int = 100) -> None:
         optim = self.optimizer(self.net.parameters())
         pbar = trange(epoch)
-        data = TensorDataset(self.x, self.y)
+        x_buf = torch.empty_like(self.x).pin_memory()
+        y_buf = torch.empty_like(self.y).pin_memory()
 
         for _ in pbar:
-            for x, y in tqdm(self.loader(data, batch_size=self.train_batch)):
-                x = x.to(device=self.device)
-                y = y.to(device=self.device)
+            idx = torch.randperm(self.x.shape[0])
+            x_buf.copy_(self.x[idx])
+            y_buf.copy_(self.y[idx])
+            for i in range(0, self.x.shape[0], self.train_batch):
+                x = x_buf[i : i + self.train_batch].to(
+                    device=self.device, non_blocking=True
+                )
+                y = y_buf[i : i + self.train_batch].to(
+                    device=self.device, non_blocking=True
+                )
                 optim.zero_grad()
                 logit = self.net(x)
                 loss = self.loss(logit, y)
@@ -98,7 +91,7 @@ class MLPCrossEntropy:
         prd = torch.cat(
             [
                 self.net(x.to(self.device)).argmax(dim=1).to(self.y_test.device)
-                for x in torch.split(self.x_test, self.test_batch)
+                for x in torch.split(self.x_test, self.train_batch * 2)
             ]
         )
         self.net.train()
