@@ -1,6 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
-from typing import Any
 
 import numpy as np
 import torch
@@ -15,65 +14,59 @@ NUM_THREADS = 8
 MIN_TEST_BATCH = 1024
 
 
-@dataclass(slots=True, kw_only=True)
-class ProbingData:
+@dataclass(slots=True)
+class ProbData:
     x: torch.Tensor
     y: torch.Tensor
     x_test: torch.Tensor
     y_test: torch.Tensor
-    dtype: torch.dtype = torch.float32
-    label_dtype: torch.dtype = torch.long
 
-    def __post_init__(self):
-        def helper(data: Any, data_type: torch.dtype) -> torch.Tensor:
-            if not isinstance(data, (torch.Tensor, np.ndarray, list)):
-                raise ValueError(
-                    "Input must either a torch tensor, numpy array or python list"
-                )
-            return torch.as_tensor(data, dtype=data_type)
+    def __init__(
+        self,
+        *,
+        x: torch.Tensor | np.ndarray,
+        y: torch.Tensor | np.ndarray,
+        x_test: torch.Tensor | np.ndarray,
+        y_test: torch.Tensor | np.ndarray,
+        dtype: torch.dtype = torch.float32,
+    ):
+        self.x = torch.as_tensor(x, dtype=dtype)
+        self.x_test = torch.as_tensor(x_test, dtype=dtype)
 
-        self.x = helper(self.x, self.dtype)
-        self.x_test = helper(self.x_test, self.dtype)
+        self.y = torch.as_tensor(y, dtype=torch.long)
+        self.y_test = torch.as_tensor(y_test, dtype=torch.long)
 
-        self.y = helper(self.y, self.label_dtype)
-        self.y_test = helper(self.y_test, self.label_dtype)
+
+@dataclass
+class ProbConfig:
+    device: str = "cpu"
+    mlp_config: MLPConfig = field(default_factory=MLPConfig)
+    optim_config: OptimConfig = field(default_factory=OptimConfig)
 
 
 class MLPCrossEntropy:
-    def __init__(
-        self,
-        data: ProbingData,
-        device: torch.device,
-        mlp_config: MLPConfig | None = None,
-        optim_config: OptimConfig | None = None,
-    ) -> None:
-        if mlp_config is None:
-            mlp_config = MLPConfig()
-
-        if optim_config is None:
-            optim_config = OptimConfig()
-
+    def __init__(self, data: ProbData, config: ProbConfig) -> None:
         self.x = data.x
         self.y = data.y
         self.x_test = data.x_test
         self.y_test = data.y_test
-        self.device = device
+        self.device = torch.device(config.device)
         self.max_acc = 0
-        self.mlp_config = mlp_config
+        self.mlp_config = config.mlp_config
 
-        self.test_batch = max(optim_config.batch_size * 2, MIN_TEST_BATCH)
-        mlp_config.input_dim = data.x.shape[1]
-        mlp_config.out_dim = int(data.y.max().item()) + 1
+        self.test_batch = max(config.optim_config.batch_size * 2, MIN_TEST_BATCH)
+        config.mlp_config.input_dim = data.x.shape[1]
+        config.mlp_config.out_dim = int(data.y.max().item()) + 1
 
-        self.net = mlp_factory(mlp_config)
+        self.net = mlp_factory(config.mlp_config)
         self.loss = tnn.CrossEntropyLoss()
-        self.net.to(device=device)
-        self.loss.to(device=device)
-        self.optimizer = optim_factory(optim_config)
+        self.net.to(device=self.device)
+        self.loss.to(device=self.device)
+        self.optimizer = optim_factory(config.optim_config)
 
         self.loader = partial(
             DataLoader,
-            batch_size=optim_config.batch_size,
+            batch_size=config.optim_config.batch_size,
             shuffle=True,
             drop_last=True,
             num_workers=NUM_THREADS,
@@ -132,3 +125,8 @@ class MLPCrossEntropy:
             self.reset_net()
 
         self.net.to(self.device)
+
+    def to(self, device: torch.device) -> None:
+        self.device = device
+        self.net.to(device=self.device)
+        self.loss.to(device=self.device)

@@ -40,6 +40,7 @@ class Unsupervised:
         self.encoder = torch.nn.Identity()
         self.optim_factory = optim_factory(config.optim_config)
         self.device = torch.device(config.device)
+
         self.loader = partial(
             DataLoader,
             batch_size=config.optim_config.batch_size,

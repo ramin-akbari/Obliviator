@@ -6,6 +6,7 @@ from numpy import ndarray
 from torch import Tensor
 
 import obliviator.schemas as oblvsc
+from evaluation.probing import ProbConfig
 
 from .user import UserSup, UserUnsup
 
@@ -43,6 +44,8 @@ class Experiment:
     """Dataset Used For Erasure """
     mode: Literal["sup", "unsup"]
     """Erasure Mode [sup:Supervised (with y-label) , unsup:Unsupervised] """
+    eraser_device: str
+    probing_device: str
 
 
 @dataclass(slots=True)
@@ -50,11 +53,8 @@ class BasicErasureConfig:
     data_adr: Path
     """Directory of Dataset [x:Representations, y:Utility Attribute, s: Unwanted Atrribute]"""
 
-    probing_encoder: oblvsc.MLPConfig
-    """Probing Network Configuration - MLP architecture"""
-
-    probing_optimizer: oblvsc.OptimConfig
-    """ Probing Network Optimizer"""
+    prob_config: ProbConfig = field(default_factory=ProbConfig)
+    """Probing Networks Configuration [MLP + Cross-Entropy]"""
 
 
 @dataclass(slots=True)

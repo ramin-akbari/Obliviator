@@ -20,8 +20,8 @@ class OptimConfig:
     decoupled_weight_decay: bool = True
     """Switches to AdamW Variants"""
     use_nesterov: bool = True
-    """With Adam is Equivalent to NAdamW
-    With SGD is Equivalent to Nesterov Momentum"""
+    """- With Adam is Equivalent to NAdamW
+       - With SGD is Equivalent to Nesterov Momentum"""
     beta_1: float = 0.85
     """Momentum Coefficient"""
     beta_2: float = 0.995
@@ -110,7 +110,9 @@ class UnsupervisedConfig:
 
     matmul_batch: int | None = None
     """Batch size dimension for matrix-multiplication [used for covariance calculation and EVP]"""
+
     device: str = "cpu"
+    """ Device : [cpu] or cuda or [cuda:0(device id)]"""
     optim_config: OptimConfig = field(default_factory=OptimConfig)
     encoder_config: MLPConfig = field(default_factory=MLPConfig)
 

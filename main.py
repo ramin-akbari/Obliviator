@@ -7,6 +7,6 @@ from configs.schemas import InputConfig
 
 cfg = tyro.cli(InputConfig)
 
-oblv_config, probing_config, probing_optimizer, data = process_args(cfg)
+eraser, adv_cls, utl_cls = process_args(cfg)
 
-print(data)
+print(eraser)
