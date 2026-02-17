@@ -9,4 +9,6 @@ cfg = tyro.cli(InputConfig)
 
 eraser, adv_cls, utl_cls = process_args(cfg)
 
-print(eraser)
+print(eraser.encoder)
+print(adv_cls.net)
+print(utl_cls.net)

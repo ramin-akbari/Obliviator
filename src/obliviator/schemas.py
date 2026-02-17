@@ -165,5 +165,5 @@ class SupervisedData(UnsupervisedData):
         y: torch.Tensor | np.ndarray,
         dtype: torch.dtype = torch.float32,
     ):
-        super().__init__(x=x, s=s, x_test=x_test, dtype=dtype)
-        self.s = torch.as_tensor(s, dtype=dtype)
+        UnsupervisedData.__init__(self, x=x, s=s, x_test=x_test, dtype=dtype)
+        self.y = torch.as_tensor(y, dtype=dtype)

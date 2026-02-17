@@ -44,8 +44,10 @@ class Experiment:
     """Dataset Used For Erasure """
     mode: Literal["sup", "unsup"]
     """Erasure Mode [sup:Supervised (with y-label) , unsup:Unsupervised] """
-    eraser_device: str
-    probing_device: str
+    eraser_device: str = "cpu"
+    """Obliviator's Device"""
+    probing_device: str = "cpu"
+    """Unwanted and Utility Classifier's Device"""
 
 
 @dataclass(slots=True)

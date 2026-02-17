@@ -37,7 +37,8 @@ class Unsupervised:
         self.evptau_z = config.evp_tau_z
 
         self.encoder_config = config.encoder_config
-        self.encoder = torch.nn.Identity()
+        self._update_encoder(self.x.shape[1])
+
         self.optim_factory = optim_factory(config.optim_config)
         self.device = torch.device(config.device)
 
