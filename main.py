@@ -9,7 +9,4 @@ cfg = tyro.cli(InputConfig)
 
 eraser, adv_cls, utl_cls = process_args(cfg)
 
-print(eraser.encoder)
-print(eraser.phi_x.w.shape)
-print(eraser.phi_z.w.shape)
-print(eraser.y.shape)
+adv_cls.train(epoch=80)

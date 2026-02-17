@@ -18,9 +18,10 @@ class DeepClassifier(MLPConfig):
 
 @dataclass(slots=True)
 class ClassifierOptim(OptimConfig):
-    batch_size: int = 4096
-    weight_decay: float = 0.01
-    lr: float = 5e-3
+    batch_size: int = 8192
+    weight_decay: float = 0.001
+    lr: float = 1e-4
+    use_nesterov: bool = True
 
 
 @dataclass(slots=True)

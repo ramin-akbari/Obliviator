@@ -22,9 +22,9 @@ class OptimConfig:
     use_nesterov: bool = True
     """- With Adam is Equivalent to NAdamW
        - With SGD is Equivalent to Nesterov Momentum"""
-    beta_1: float = 0.85
+    beta_1: float = 0.9
     """Momentum Coefficient"""
-    beta_2: float = 0.995
+    beta_2: float = 0.999
     """Squared Momentum Coefficient"""
     epsilon: float = 1e-8
     """Stablizer"""

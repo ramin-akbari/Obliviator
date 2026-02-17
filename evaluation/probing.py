@@ -5,13 +5,13 @@ import numpy as np
 import torch
 import torch.nn as tnn
 from torch.utils.data import DataLoader, TensorDataset
-from tqdm import trange
+from tqdm import tqdm, trange
 
 from obliviator.schemas import MLPConfig, OptimConfig
 from obliviator.utils.misc import mlp_factory, optim_factory
 
-NUM_THREADS = 8
-MIN_TEST_BATCH = 1024
+NUM_THREADS = 16
+MIN_TEST_BATCH = 2048
 
 
 @dataclass(slots=True)
@@ -54,7 +54,7 @@ class MLPCrossEntropy:
         self.max_acc = 0
         self.mlp_config = config.mlp_config
 
-        self.test_batch = max(config.optim_config.batch_size * 2, MIN_TEST_BATCH)
+        self.test_batch = max(config.optim_config.batch_size, MIN_TEST_BATCH)
         config.mlp_config.input_dim = data.x.shape[1]
         config.mlp_config.out_dim = int(data.y.max().item()) + 1
 
@@ -63,10 +63,10 @@ class MLPCrossEntropy:
         self.net.to(device=self.device)
         self.loss.to(device=self.device)
         self.optimizer = optim_factory(config.optim_config)
+        self.train_batch = config.optim_config.batch_size
 
         self.loader = partial(
             DataLoader,
-            batch_size=config.optim_config.batch_size,
             shuffle=True,
             drop_last=True,
             num_workers=NUM_THREADS,
@@ -79,7 +79,7 @@ class MLPCrossEntropy:
         data = TensorDataset(self.x, self.y)
 
         for _ in pbar:
-            for x, y in self.loader(data):
+            for x, y in tqdm(self.loader(data, batch_size=self.train_batch)):
                 x = x.to(device=self.device)
                 y = y.to(device=self.device)
                 optim.zero_grad()
