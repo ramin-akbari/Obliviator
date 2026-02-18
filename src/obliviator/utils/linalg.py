@@ -48,6 +48,7 @@ def batched_matmul(
     y_fixed = y_fixed.to(device=device)
 
     if batch is None:
+        x = x.to(device=device)
         return x.mm(y_fixed).to(device=x.device)
 
     def helper(bx: torch.Tensor):
@@ -59,6 +60,7 @@ def batched_matmul(
 
 def select_top_k_eigvec(x: torch.Tensor, rtol: float, atol: float) -> torch.Tensor:
     eigval, eigvec = torch.linalg.eigh(x)
+    print(eigval[-10:])
     tol = max(eigval[-1] * rtol, atol)
     return eigvec[:, eigval > tol]
 
@@ -72,6 +74,8 @@ def find_null_sx(
     atol: float = 1e-6,
 ) -> torch.Tensor:
     if batch is None:
+        s = s.to(device=device)
+        x = x.to(device=device)
         Csx = cross_cov(s, x)
     else:
         Csx = batched_cross_cov(s, x, batch, device)
@@ -93,19 +97,28 @@ def null_supervised_pca(
     rtol: float = 1e-5,
     atol: float = 1e-6,
 ) -> torch.Tensor:
+    
     u_null = find_null_sx(x, s, device, batch, rtol, atol)
+    print(u_null.device)
     mat = torch.zeros(u_null.shape[1], u_null.shape[1], device=device)
     if batch is None:
-        helper = partial(cross_cov, y=x)
+        x = x.to(device)
+        def helper(z):
+            return cross_cov(x=z.to(device), y=x)
     else:
         helper = partial(batched_cross_cov, y=x, device=device, batch=batch)
 
     for tau, rv in zip(taus, rvs):
         C = helper(rv).mm(u_null)
+        C.div_(schur_norm(C))
         mat.addmm_(C.T, C, alpha=tau)
-
     pcs = select_top_k_eigvec(mat, rtol, atol)
+    print(pcs.device)
     return u_null.mm(pcs)
+
+def schur_norm(C:torch.Tensor) -> float:
+    C = C.abs()
+    return (C.sum(dim=0).max() * C.sum(dim=1).max()).sqrt_()
 
 
 def null_pca(

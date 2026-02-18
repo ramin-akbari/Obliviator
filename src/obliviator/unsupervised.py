@@ -50,12 +50,14 @@ class Unsupervised:
             shuffle=True,
             drop_last=True,
         )
+
+        print(median_sigma(self.x, config.sigma_min_x,alpha=1.3))
         self.phi_x = RandomFourierFeature(
             self.x.shape[1],
             config.rff_scale_x,
             config.drff_max,
             config.drff_min,
-            median_sigma(self.x, config.sigma_min_x),
+            median_sigma(self.x, config.sigma_min_x,alpha=1.3),
             config.resample_x,
             self.device,
         )
@@ -98,8 +100,8 @@ class Unsupervised:
         self.x_test = self.phi_x(self.x_test, self.matmul_batch)
 
         # perfoming KPCA/SKPCA [depending on erasure scheme] in the null space of Csx
-        f = self._dim_reduction(x, tol)
-
+        f = self._dim_reduction(x, tol).to(device = x.device)
+      
         # update input and test
         self.x = self._update_and_project(f, x, normalize=True)
 
@@ -268,14 +270,14 @@ class Unsupervised:
         x.sub_(mu)
 
         # update input
-        x = batched_matmul(x, f, self.matmul_batch, self.device)
+        x = batched_matmul(x, f, self.matmul_batch, self.device).to(device=x.device)
 
         # update test
         self.x_test.sub_(mu)
-        self.x_test = batched_matmul(self.x_test, f, self.matmul_batch, self.device)
+        self.x_test = batched_matmul(self.x_test, f, self.matmul_batch, self.device).to(device=self.x_test.device)
 
         if normalize:
-            x.div_(self.x.norm(dim=1, keepdim=True))
+            x.div_(x.norm(dim=1, keepdim=True))
             self.x_test.div_(self.x_test.norm(dim=1, keepdim=True))
         return x
 

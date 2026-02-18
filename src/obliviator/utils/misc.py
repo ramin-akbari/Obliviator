@@ -85,6 +85,5 @@ def convert_to_onehot(x: np.ndarray | torch.Tensor, is_zero_indexed: bool):
     else:
         label_max = int(x.max().item() + 1)
 
-    one_hot = torch.zeros(x.shape[0], label_max)
-    one_hot[x] = 1
+    one_hot = torch.zeros(x.shape[0], label_max).scatter_(1, x.unsqueeze(1), 1)
     return one_hot

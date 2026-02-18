@@ -42,10 +42,10 @@ class ProbConfig:
 class MLPCrossEntropy:
     def __init__(self, data: ProbData, config: ProbConfig) -> None:
         self.device = torch.device(config.device)
-        self.x = data.x.to(device=self.device)
-        self.y = data.y.to(device=self.device)
-        self.x_test = data.x_test.to(device=self.device)
-        self.y_test = data.y_test.to(device=self.device)
+        self.x = data.x
+        self.y = data.y
+        self.x_test = data.x_test
+        self.y_test = data.y_test
 
         self.max_acc = 0
         self.mlp_config = config.mlp_config
