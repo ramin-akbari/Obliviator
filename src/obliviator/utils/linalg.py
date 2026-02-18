@@ -2,15 +2,10 @@ from functools import partial
 
 import torch
 
-
-def cross_cov(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    x = x - x.mean(dim=0)
-    # technically not needed, only because of floating-point error in x_mean
-    y = y - y.mean(dim=0)
-    return (x.T @ y).mul(1 / x.shape[0])
-
-
-def batched_cov(x: torch.Tensor, batch: int, device: torch.device) -> torch.Tensor:
+def _cov_mat(x: torch.Tensor, batch: int, device: torch.device) -> torch.Tensor:
+    if batch is None:
+        return torch.cov(x.to(device=device).T)
+    
     mu_x = x.mean(dim=0).to(device=device)
     batched_x = torch.split(x, batch)
     Cxx = torch.zeros(x.shape[1], x.shape[1], device=device)
@@ -23,11 +18,19 @@ def batched_cov(x: torch.Tensor, batch: int, device: torch.device) -> torch.Tens
     return Cxx.div(x.shape[0])
 
 
-def batched_cross_cov(
-    x: torch.Tensor, y: torch.Tensor, batch: int, device: torch.device
+def _cross_cov(
+    x: torch.Tensor, y: torch.Tensor, batch: int | None, device: torch.device
 ) -> torch.Tensor:
     mu_x = x.mean(dim=0).to(device=device)
+    # technically not needed, only because of floating-point error in x_mean
     mu_y = y.mean(dim=0).to(device=device)
+
+    if batch is None:
+        xd = x.to(device=device)
+        yd = y.to(device=device)
+        Cxy = xd.T.mm(yd)
+        return Cxy.div(x.shape[0])
+
     batched_x = torch.split(x, batch)
     batched_y = torch.split(y, batch)
     Cxy = torch.zeros(x.shape[1], y.shape[1], device=device)
@@ -42,45 +45,36 @@ def batched_cross_cov(
     return Cxy.div(x.shape[0])
 
 
-def batched_matmul(
-    x: torch.Tensor, y_fixed: torch.Tensor, batch: int | None, device: torch.device
+def _project_x_by_mat(
+    x: torch.Tensor, mat: torch.Tensor, batch: int | None, device: torch.device
 ) -> torch.Tensor:
-    y_fixed = y_fixed.to(device=device)
+    
+    mat = mat.to(device=device)
 
     if batch is None:
-        x = x.to(device=device)
-        return x.mm(y_fixed).to(device=x.device)
+        xd = x.to(device=device)
+        return xd.mm(mat).to(device=x.device)
 
     def helper(bx: torch.Tensor):
         bx = bx.to(device=device)
-        return bx.mm(y_fixed).to(device=bx.device)
+        return bx.mm(mat).to(device=bx.device)
 
     return torch.cat([helper(bx) for bx in torch.split(x, batch)], dim=0)
 
 
-def select_top_k_eigvec(x: torch.Tensor, rtol: float, atol: float) -> torch.Tensor:
+def _select_top_k_eigvec(x: torch.Tensor, rtol: float, atol: float) -> torch.Tensor:
     eigval, eigvec = torch.linalg.eigh(x)
-    print(eigval[-10:])
     tol = max(eigval[-1] * rtol, atol)
     return eigvec[:, eigval > tol]
 
 
-def find_null_sx(
-    x: torch.Tensor,
-    s: torch.Tensor,
-    device: torch.device,
-    batch: int | None = None,
+def _find_null(
+    C: torch.Tensor,
     rtol: float = 1e-5,
-    atol: float = 1e-6,
+    atol: float = 2e-7,
 ) -> torch.Tensor:
-    if batch is None:
-        s = s.to(device=device)
-        x = x.to(device=device)
-        Csx = cross_cov(s, x)
-    else:
-        Csx = batched_cross_cov(s, x, batch, device)
-
-    _, sigmas, v = torch.linalg.svd(Csx, full_matrices=False)
+    
+    _, sigmas, v = torch.linalg.svd(C, full_matrices=False)
     tol = max(rtol * sigmas[0], atol)
     v = v[sigmas > tol].T
     full_v = torch.linalg.qr(v, mode="complete")[0]
@@ -88,53 +82,51 @@ def find_null_sx(
 
 
 def null_supervised_pca(
-    x: torch.Tensor,
-    rvs: list[torch.Tensor],
-    taus: list[float],
-    s: torch.Tensor,
+    target_rv: torch.Tensor,
+    align_rvs: list[torch.Tensor],
+    align_taus: list[float],
+    null_rv: torch.Tensor,
     device: torch.device,
     batch: int | None = None,
     rtol: float = 1e-5,
-    atol: float = 1e-6,
+    atol: float = 2e-7,
 ) -> torch.Tensor:
     
-    u_null = find_null_sx(x, s, device, batch, rtol, atol)
-    print(u_null.device)
+    Csx = _cross_cov(null_rv, target_rv, batch, device)
+    u_null = _find_null(Csx, rtol, atol)
+    
     mat = torch.zeros(u_null.shape[1], u_null.shape[1], device=device)
-    if batch is None:
-        x = x.to(device)
-        def helper(z):
-            return cross_cov(x=z.to(device), y=x)
-    else:
-        helper = partial(batched_cross_cov, y=x, device=device, batch=batch)
+    cov_ix = partial(_cross_cov, y=target_rv, device=device, batch=batch)
 
-    for tau, rv in zip(taus, rvs):
-        C = helper(rv).mm(u_null)
-        C.div_(schur_norm(C))
-        mat.addmm_(C.T, C, alpha=tau)
-    pcs = select_top_k_eigvec(mat, rtol, atol)
-    print(pcs.device)
+    for tau, rv in zip(align_taus, align_rvs):
+        C = cov_ix(rv).mm(u_null)
+        C = C.T.mm(C)
+        C.div_(fast_sym_spectral_norm(C)+1e-7)
+        mat.add_(C.mul_(tau))
+    pcs = _select_top_k_eigvec(mat, rtol, atol)
+    
     return u_null.mm(pcs)
 
-def schur_norm(C:torch.Tensor) -> float:
-    C = C.abs()
-    return (C.sum(dim=0).max() * C.sum(dim=1).max()).sqrt_()
+def fast_sym_spectral_norm(C:torch.Tensor, num_iter:int =5) -> float:
+    v = torch.randn(C.shape[1],device=C.device,dtype=C.dtype)
+    for _ in range(num_iter):
+        v.copy_(C.mv(v))
+        v.div_(v.norm())
+    return C.mv(v).norm().item()
 
 
 def null_pca(
-    x: torch.Tensor,
-    s: torch.Tensor,
+    target_rv: torch.Tensor,
+    null_rv: torch.Tensor,
     device: torch.device,
     batch: int | None = None,
     rtol: float = 1e-5,
-    atol: float = 1e-6,
+    atol: float = 2e-7,
 ) -> torch.Tensor:
-    u_null = find_null_sx(x, s, device, batch, rtol, atol)
-    if batch is None:
-        C = torch.cov(x.T)
-    else:
-        C = batched_cov(x, batch, device)
+    Csx = _cross_cov(null_rv, target_rv, batch, device)
+    u_null = _find_null(Csx, rtol, atol)
+    C = _cov_mat(target_rv,batch, device)
     C = C.mm(u_null)
     C = u_null.T.mm(C)
-    pcs = select_top_k_eigvec(C, rtol, atol)
+    pcs = _select_top_k_eigvec(C, rtol, atol)
     return u_null.mm(pcs)

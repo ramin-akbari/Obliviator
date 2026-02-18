@@ -6,7 +6,7 @@ from tqdm import trange
 
 from .schemas import MLPConfig, UnsupervisedConfig, UnsupervisedData
 from .utils.kernel import RandomFourierFeature, median_sigma
-from .utils.linalg import batched_matmul, cross_cov, null_pca, null_supervised_pca
+from .utils.linalg import _project_x2y, _full_batch_cross_cov, null_pca, null_supervised_pca
 from .utils.misc import mlp_factory, optim_factory
 
 NUM_THREADS = 8
@@ -51,13 +51,12 @@ class Unsupervised:
             drop_last=True,
         )
 
-        print(median_sigma(self.x, config.sigma_min_x,alpha=1.3))
         self.phi_x = RandomFourierFeature(
             self.x.shape[1],
             config.rff_scale_x,
             config.drff_max,
             config.drff_min,
-            median_sigma(self.x, config.sigma_min_x,alpha=1.3),
+            median_sigma(self.x, config.sigma_min_x,alpha=1.25),
             config.resample_x,
             self.device,
         )
@@ -196,17 +195,17 @@ class Unsupervised:
                 w = self._rff_encoder_embeddings(z)
 
                 # s is already cached
-                hs_s = cross_cov(w, s).square().mean().sqrt()
+                hs_s = _full_batch_cross_cov(w, s).square().mean().sqrt()
 
                 hs_p = torch.tensor(0.0, device=self.device)
 
                 # HSIC for cached inputs, we normalize HSIC based on the dimension of RVs
                 for tau, rv in zip(cached_taus, rvs[:n_cached]):
-                    hs_p = hs_p + cross_cov(w, rv).square().mean().sqrt().mul(tau)
+                    hs_p = hs_p + _full_batch_cross_cov(w, rv).square().mean().sqrt().mul(tau)
 
                 # HSIC for the not_cached inputs
                 for tau, phi, rv in zip(not_cached_taus, active_phi, rvs[n_cached:]):
-                    hs_p = hs_p + cross_cov(w, phi(rv)).square().mean().sqrt().mul(tau)
+                    hs_p = hs_p + _full_batch_cross_cov(w, phi(rv)).square().mean().sqrt().mul(tau)
 
                 loss = hs_s - hs_p
                 loss.backward()
@@ -270,11 +269,11 @@ class Unsupervised:
         x.sub_(mu)
 
         # update input
-        x = batched_matmul(x, f, self.matmul_batch, self.device).to(device=x.device)
+        x = _project_x2y(x, f, self.matmul_batch, self.device).to(device=x.device)
 
         # update test
         self.x_test.sub_(mu)
-        self.x_test = batched_matmul(self.x_test, f, self.matmul_batch, self.device).to(device=self.x_test.device)
+        self.x_test = _project_x2y(self.x_test, f, self.matmul_batch, self.device).to(device=self.x_test.device)
 
         if normalize:
             x.div_(x.norm(dim=1, keepdim=True))
