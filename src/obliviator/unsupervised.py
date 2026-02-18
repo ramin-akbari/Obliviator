@@ -6,11 +6,14 @@ from tqdm import trange
 
 from .schemas import MLPConfig, UnsupervisedConfig, UnsupervisedData
 from .utils.kernel import RandomFourierFeature, median_sigma
-from .utils.linalg import _project_x2y, _full_batch_cross_cov, null_pca, null_supervised_pca
+from .utils.linalg import (
+    _cross_cov,
+    null_pca,
+    null_supervised_pca,
+)
 from .utils.misc import mlp_factory, optim_factory
 
 NUM_THREADS = 8
-DRFF_SCALE: int = 4
 
 
 class Unsupervised:
@@ -29,7 +32,7 @@ class Unsupervised:
         self.smooth_sigma_factor = config.smoother_rff_factor
 
         self.encoder_batch = config.optim_config.batch_size
-        self.matmul_batch = config.matmul_batch
+        self.mm_batch = config.matmul_batch
 
         self.tau_x = config.tau_x
         self.tau_z = config.tau_z
@@ -56,7 +59,7 @@ class Unsupervised:
             config.rff_scale_x,
             config.drff_max,
             config.drff_min,
-            median_sigma(self.x, config.sigma_min_x,alpha=1.25),
+            median_sigma(self.x, config.sigma_min_x, alpha=1.25),
             config.resample_x,
             self.device,
         )
@@ -91,16 +94,16 @@ class Unsupervised:
                 False,
                 self.device,
             )
-            self.s = phi_s(self.s, self.matmul_batch)
+            self.s = phi_s(self.s, self.mm_batch)
 
     def null_dim_reduction(self, tol: float) -> tuple[torch.Tensor, torch.Tensor]:
         # map input with RFF
-        x = self.phi_x(self.x, self.matmul_batch)
-        self.x_test = self.phi_x(self.x_test, self.matmul_batch)
+        x = self.phi_x(self.x, self.mm_batch)
+        self.x_test = self.phi_x(self.x_test, self.mm_batch)
 
         # perfoming KPCA/SKPCA [depending on erasure scheme] in the null space of Csx
-        f = self._dim_reduction(x, tol).to(device = x.device)
-      
+        f = self._dim_reduction(x, tol)
+
         # update input and test
         self.x = self._update_and_project(f, x, normalize=True)
 
@@ -150,7 +153,7 @@ class Unsupervised:
         return z_new, self.x_test
 
     def _dim_reduction(self, x: torch.Tensor, tol: float) -> torch.Tensor:
-        return null_pca(x, self.s, self.device, self.matmul_batch, rtol=tol)
+        return null_pca(x, self.s, self.device, self.mm_batch, rtol=tol)
 
     def _obliviator_step(
         self,
@@ -182,6 +185,9 @@ class Unsupervised:
         not_cached_taus: list[float],
         epochs: int,
     ):
+        def scaled_cross_cov_norm(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+            return _cross_cov(x, y, batch=None, device=x.device).square().mean().sqrt()
+
         data = self.loader(TensorDataset(*processed_data, self.s))
         optimizer = self.optim_factory(self.encoder.parameters())
         pbar = trange(epochs)
@@ -195,17 +201,17 @@ class Unsupervised:
                 w = self._rff_encoder_embeddings(z)
 
                 # s is already cached
-                hs_s = _full_batch_cross_cov(w, s).square().mean().sqrt()
+                hs_s = scaled_cross_cov_norm(w, s)
 
                 hs_p = torch.tensor(0.0, device=self.device)
 
                 # HSIC for cached inputs, we normalize HSIC based on the dimension of RVs
                 for tau, rv in zip(cached_taus, rvs[:n_cached]):
-                    hs_p = hs_p + _full_batch_cross_cov(w, rv).square().mean().sqrt().mul(tau)
+                    hs_p = hs_p + scaled_cross_cov_norm(w, rv).mul(tau)
 
                 # HSIC for the not_cached inputs
                 for tau, phi, rv in zip(not_cached_taus, active_phi, rvs[n_cached:]):
-                    hs_p = hs_p + _full_batch_cross_cov(w, phi(rv)).square().mean().sqrt().mul(tau)
+                    hs_p = hs_p + scaled_cross_cov_norm(w, phi(rv)).mul(tau)
 
                 loss = hs_s - hs_p
                 loss.backward()
@@ -231,12 +237,12 @@ class Unsupervised:
         self.phi.change_params(sigma=median_sigma(w, self.sigma_min))
 
         # map encoder's output using RFF
-        w = self.phi(w, self.matmul_batch)
-        self.x_test = self.phi(self.x_test, self.matmul_batch)
+        w = self.phi(w, self.mm_batch)
+        self.x_test = self.phi(self.x_test, self.mm_batch)
 
         # map data_list
         evp_data = [
-            phi(var, self.matmul_batch)
+            phi(var, self.mm_batch)
             for var, phi in zip(processed_data[n_cached:], active_phi)
         ]
 
@@ -244,7 +250,7 @@ class Unsupervised:
 
         # solve the SKPCA (EVP in the paper) in the nullspace of Csx
         f = null_supervised_pca(
-            w, evp_data, evptau_list, self.s, self.device, self.matmul_batch, rtol=tol
+            w, evp_data, evptau_list, self.s, self.device, self.mm_batch, rtol=tol
         )
 
         return self._update_and_project(f, w, True)
@@ -265,15 +271,29 @@ class Unsupervised:
     def _update_and_project(
         self, f: torch.Tensor, x: torch.Tensor, normalize: bool = True
     ) -> torch.Tensor:
+        # we assume f is already on the device [since it is the solution of evp]
+        def project(x: torch.Tensor, mat: torch.Tensor) -> torch.Tensor:
+            if self.mm_batch is None:
+                xd = x.to(device=self.device)
+                return xd.mm(mat).to(device=x.device)
+
+            def helper(bx: torch.Tensor):
+                bx = bx.to(device=self.device)
+                return bx.mm(mat).to(device=bx.device)
+
+            return torch.cat(
+                [helper(bx) for bx in torch.split(x, self.mm_batch)], dim=0
+            )
+
         mu = x.mean(dim=0)
-        x.sub_(mu)
 
         # update input
-        x = _project_x2y(x, f, self.matmul_batch, self.device).to(device=x.device)
+        x.sub_(mu)
+        x = project(x=x, mat=f)
 
         # update test
         self.x_test.sub_(mu)
-        self.x_test = _project_x2y(self.x_test, f, self.matmul_batch, self.device).to(device=self.x_test.device)
+        self.x_test = project(x=self.x_test, mat=f)
 
         if normalize:
             x.div_(x.norm(dim=1, keepdim=True))
@@ -307,7 +327,7 @@ class Unsupervised:
 
         for map, data, tau, evptau in zip(phi_list, data_list, tau_list, evptau_list):
             if not map.resample:
-                cached.append(map(data, self.matmul_batch))
+                cached.append(map(data, self.mm_batch))
                 cached_tau.append(tau)
                 cached_evptau.append(evptau)
             else:

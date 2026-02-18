@@ -2,10 +2,11 @@ from functools import partial
 
 import torch
 
-def _cov_mat(x: torch.Tensor, batch: int, device: torch.device) -> torch.Tensor:
+
+def _cov_mat(x: torch.Tensor, batch: int | None, device: torch.device) -> torch.Tensor:
     if batch is None:
         return torch.cov(x.to(device=device).T)
-    
+
     mu_x = x.mean(dim=0).to(device=device)
     batched_x = torch.split(x, batch)
     Cxx = torch.zeros(x.shape[1], x.shape[1], device=device)
@@ -45,23 +46,6 @@ def _cross_cov(
     return Cxy.div(x.shape[0])
 
 
-def _project_x_by_mat(
-    x: torch.Tensor, mat: torch.Tensor, batch: int | None, device: torch.device
-) -> torch.Tensor:
-    
-    mat = mat.to(device=device)
-
-    if batch is None:
-        xd = x.to(device=device)
-        return xd.mm(mat).to(device=x.device)
-
-    def helper(bx: torch.Tensor):
-        bx = bx.to(device=device)
-        return bx.mm(mat).to(device=bx.device)
-
-    return torch.cat([helper(bx) for bx in torch.split(x, batch)], dim=0)
-
-
 def _select_top_k_eigvec(x: torch.Tensor, rtol: float, atol: float) -> torch.Tensor:
     eigval, eigvec = torch.linalg.eigh(x)
     tol = max(eigval[-1] * rtol, atol)
@@ -73,7 +57,7 @@ def _find_null(
     rtol: float = 1e-5,
     atol: float = 2e-7,
 ) -> torch.Tensor:
-    
+
     _, sigmas, v = torch.linalg.svd(C, full_matrices=False)
     tol = max(rtol * sigmas[0], atol)
     v = v[sigmas > tol].T
@@ -91,24 +75,25 @@ def null_supervised_pca(
     rtol: float = 1e-5,
     atol: float = 2e-7,
 ) -> torch.Tensor:
-    
+
     Csx = _cross_cov(null_rv, target_rv, batch, device)
     u_null = _find_null(Csx, rtol, atol)
-    
+
     mat = torch.zeros(u_null.shape[1], u_null.shape[1], device=device)
     cov_ix = partial(_cross_cov, y=target_rv, device=device, batch=batch)
 
     for tau, rv in zip(align_taus, align_rvs):
         C = cov_ix(rv).mm(u_null)
         C = C.T.mm(C)
-        C.div_(fast_sym_spectral_norm(C)+1e-7)
+        C.div_(fast_sym_spectral_norm(C) + 1e-7)
         mat.add_(C.mul_(tau))
     pcs = _select_top_k_eigvec(mat, rtol, atol)
-    
+
     return u_null.mm(pcs)
 
-def fast_sym_spectral_norm(C:torch.Tensor, num_iter:int =5) -> float:
-    v = torch.randn(C.shape[1],device=C.device,dtype=C.dtype)
+
+def fast_sym_spectral_norm(C: torch.Tensor, num_iter: int = 5) -> float:
+    v = torch.randn(C.shape[1], device=C.device, dtype=C.dtype)
     for _ in range(num_iter):
         v.copy_(C.mv(v))
         v.div_(v.norm())
@@ -125,7 +110,7 @@ def null_pca(
 ) -> torch.Tensor:
     Csx = _cross_cov(null_rv, target_rv, batch, device)
     u_null = _find_null(Csx, rtol, atol)
-    C = _cov_mat(target_rv,batch, device)
+    C = _cov_mat(target_rv, batch, device)
     C = C.mm(u_null)
     C = u_null.T.mm(C)
     pcs = _select_top_k_eigvec(C, rtol, atol)

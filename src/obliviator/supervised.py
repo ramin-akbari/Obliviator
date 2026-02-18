@@ -29,14 +29,14 @@ class Supervised(Unsupervised):
                 False,
                 self.device,
             )
-            self.y = phi_y(self.y, self.matmul_batch)
+            self.y = phi_y(self.y, self.mm_batch)
 
     @override
     def _dim_reduction(self, x: torch.Tensor, tol: float) -> torch.Tensor:
         data_list = [x, self.y]
         tau_list = [self.evptau_x, self.evptau_y]
         return null_supervised_pca(
-            x, data_list, tau_list, self.s, self.device, self.matmul_batch, rtol=tol
+            x, data_list, tau_list, self.s, self.device, self.mm_batch, rtol=tol
         )
 
     @override
