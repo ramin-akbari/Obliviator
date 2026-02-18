@@ -82,6 +82,9 @@ def null_supervised_pca(
     mat = torch.zeros(u_null.shape[1], u_null.shape[1], device=device)
     cov_ix = partial(_cross_cov, y=target_rv, device=device, batch=batch)
 
+    taus = torch.as_tensor(align_taus)
+    taus.div_(taus.sum())
+
     for tau, rv in zip(align_taus, align_rvs):
         C = cov_ix(rv).mm(u_null)
         C = C.T.mm(C)
