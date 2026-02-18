@@ -36,17 +36,20 @@ class ProbConfig:
     device: str = "cpu"
     mlp_config: MLPConfig = field(default_factory=MLPConfig)
     optim_config: OptimConfig = field(default_factory=OptimConfig)
+    name: str = "Classifier"
 
 
 class MLPCrossEntropy:
     def __init__(self, data: ProbData, config: ProbConfig) -> None:
-        self.x = data.x.pin_memory()
-        self.y = data.y.pin_memory()
-        self.x_test = data.x_test.pin_memory()
-        self.y_test = data.y_test.pin_memory()
         self.device = torch.device(config.device)
+        self.x = data.x.to(device=self.device)
+        self.y = data.y.to(device=self.device)
+        self.x_test = data.x_test.to(device=self.device)
+        self.y_test = data.y_test.to(device=self.device)
+
         self.max_acc = 0
         self.mlp_config = config.mlp_config
+        self.name = config.name
 
         config.mlp_config.input_dim = data.x.shape[1]
         config.mlp_config.out_dim = int(data.y.max().item()) + 1
@@ -63,12 +66,13 @@ class MLPCrossEntropy:
         pbar = trange(epoch)
         x_buf = torch.empty_like(self.x).pin_memory()
         y_buf = torch.empty_like(self.y).pin_memory()
-
+        n = self.x.shape[0] - (self.x.shape[0] % self.train_batch)
+        loss = torch.tensor(0)
         for _ in pbar:
             idx = torch.randperm(self.x.shape[0])
             x_buf.copy_(self.x[idx])
             y_buf.copy_(self.y[idx])
-            for i in range(0, self.x.shape[0], self.train_batch):
+            for i in range(0, n, self.train_batch):
                 x = x_buf[i : i + self.train_batch].to(
                     device=self.device, non_blocking=True
                 )
@@ -82,7 +86,9 @@ class MLPCrossEntropy:
                 optim.step()
 
             self.max_acc = max(self.accuracy(), self.max_acc)
-            pbar.set_description(f"Best_Accuracy :{self.max_acc * 100:<5.2f}")
+            pbar.set_description(
+                f"{self.name} accuracy: {self.max_acc * 100:<5.2f}    loss:{loss.item():<6.3f}"
+            )
 
     @torch.no_grad()
     def accuracy(self) -> float:

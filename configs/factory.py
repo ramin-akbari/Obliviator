@@ -88,13 +88,22 @@ def experiment_factory(
                     oblv = LargeUnsup()
                 case "gpt2" | "bert":
                     oblv = BaseUnsup()
+
     cls_config = ProbConfig(
         device=exp_config.probing_device,
         mlp_config=DeepClassifier(),
         optim_config=ClassifierOptim(),
+        name="Utility",
+    )
+    utility_cls = classifier_factory(data, cls_config, is_adversary=False)
+    cls_config = ProbConfig(
+        device=exp_config.probing_device,
+        mlp_config=DeepClassifier(),
+        optim_config=ClassifierOptim(),
+        name="Unwanted",
     )
     adversary_cls = classifier_factory(data, cls_config, is_adversary=True)
-    utility_cls = classifier_factory(data, cls_config, is_adversary=False)
+
     eraser = obliviator_factory(data, oblv)
 
     return eraser, adversary_cls, utility_cls

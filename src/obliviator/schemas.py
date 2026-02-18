@@ -9,7 +9,7 @@ import torch
 class OptimConfig:
     """Optimizer Configuration [Adam,AdamN,AdamW,NAdamW,SGD]"""
 
-    lr: float = 1e-3
+    lr: float = 2e-3
     """Learning Rate"""
     weight_decay: float = 0.001
     """Weight Decay or Regularizer"""
@@ -22,7 +22,7 @@ class OptimConfig:
     use_nesterov: bool = True
     """- With Adam is Equivalent to NAdamW
        - With SGD is Equivalent to Nesterov Momentum"""
-    beta_1: float = 0.9
+    beta_1: float = 0.85
     """Momentum Coefficient"""
     beta_2: float = 0.999
     """Squared Momentum Coefficient"""

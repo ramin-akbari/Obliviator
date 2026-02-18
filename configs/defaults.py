@@ -12,15 +12,16 @@ from obliviator.schemas import (
 @dataclass(slots=True)
 class DeepClassifier(MLPConfig):
     use_projection: bool = True
-    hidden_dim: int = 128
-    n_layer: int = 4
+    hidden_dim: int = 512
+    n_layer: int = 1
+    activation: ActivationType = ActivationType.SILU
 
 
 @dataclass(slots=True)
 class ClassifierOptim(OptimConfig):
-    batch_size: int = 32_768
-    weight_decay: float = 0.001
-    lr: float = 6e-3
+    batch_size: int = 250_000
+    weight_decay: float = 0.01
+    lr: float = 5e-3
     use_nesterov: bool = False
 
 
@@ -35,9 +36,10 @@ class EraserEncoder(MLPConfig):
 
 @dataclass(slots=True)
 class EraserOptim(OptimConfig):
-    batch_size: int = 32_768
+    batch_size: int = 16_384
     weight_decay: float = 0.01
     lr: float = 5e-4
+    use_nesterov: bool = False
 
 
 @dataclass(slots=True)
