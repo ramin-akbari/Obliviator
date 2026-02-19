@@ -18,14 +18,13 @@ class Supervised(Unsupervised):
         self.y = data.y
         self.tau_y = config.tau_y
         self.evptau_y = config.evp_tau_y
-
         if config.use_rff_y:
             phi_y = RandomFourierFeature(
                 self.y.shape[1],
                 config.rff_scale_y,
                 config.drff_max,
                 config.drff_min_y,
-                median_sigma(self.y, config.sigma_min_y),
+                median_sigma(self.y, config.sigma_min_y,alpha=0.9),
                 False,
                 self.device,
             )

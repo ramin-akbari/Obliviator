@@ -62,23 +62,23 @@ class MLPConfig:
 class UnsupervisedConfig:
     """Unsupervised Erasure Config. Erasure Process:  x->....->z->Encoder->w"""
 
-    drff_min: int = 1500
+    drff_min: int = 1000
     """min number of Random Fourier Features used to estimate HSIC and solve EVP """
     drff_max: int = 5000
     """max number of Random Fourier Features used to estimate HSIC and solve EVP """
 
-    rff_scale: int = 5
+    rff_scale: int = 4
     """Scale Factor for Random Fourier Features for Current RV [w]"""
-    rff_scale_x: int = 5
+    rff_scale_x: int = 6
     """Scale Factor for Random Fourier Features for Initial RV [x]"""
-    rff_scale_z: int = 5
+    rff_scale_z: int = 6
     """Scale Factor for Random Fourier Features for Previous RV [z]"""
 
-    sigma_min: float = 1.25
+    sigma_min: float = 1.75
     """Min value for sigma based on Median Heuristic for RV [w]"""
-    sigma_min_x: float = 2
+    sigma_min_x: float = 2.25
     """Min value for sigma based on Median Heuristic for RV [x]"""
-    sigma_min_z: float = 0.8
+    sigma_min_z: float = 1.5
     """Min value for sigma based on Median Heuristic for RV [z]"""
 
     resample_x: bool = False
@@ -95,7 +95,7 @@ class UnsupervisedConfig:
     """Min value for sigma based on Median Heuristic for RV [s]"""
     drff_min_s: int = 100
     """min number of Random Fourier Features for RV [s]"""
-    rff_scale_s: int = 15
+    rff_scale_s: int = 20
     """Scale Factor for Random Fourier Features for RV [s]"""
 
     tau_z: float = 0.05
@@ -105,7 +105,7 @@ class UnsupervisedConfig:
 
     evp_tau_z: float = 1
     """coefficient of Cov(z,w) in EVP"""
-    evp_tau_x: float = 0.5
+    evp_tau_x: float = 0.2
     """coefficient of Cov(x,w) in EVP"""
 
     matmul_batch: int | None = None
@@ -127,9 +127,9 @@ class SupervisedConfig(UnsupervisedConfig):
     """Use RFF for Y, if Y is binary is not required"""
     sigma_min_y: float = 0.7
     """Min value for sigma based on Median Heuristic for RV [y]"""
-    drff_min_y: int = 200
+    drff_min_y: int = 100
     """min number of Random Fourier Features for RV [y]"""
-    rff_scale_y: int = 15
+    rff_scale_y: int = 20
     """Scale Factor for Random Fourier Features for RV [y]"""
 
 

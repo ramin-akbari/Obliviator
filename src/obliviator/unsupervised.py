@@ -53,13 +53,13 @@ class Unsupervised:
             shuffle=True,
             drop_last=True,
         )
-
+        print(median_sigma(self.x, config.sigma_min_x,alpha=1.25))
         self.phi_x = RandomFourierFeature(
             self.x.shape[1],
             config.rff_scale_x,
             config.drff_max,
             config.drff_min,
-            median_sigma(self.x, config.sigma_min_x, alpha=1.25),
+            median_sigma(self.x, config.sigma_min_x,alpha=1.25),
             config.resample_x,
             self.device,
         )

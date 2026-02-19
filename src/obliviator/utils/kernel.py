@@ -79,7 +79,7 @@ def median_sigma(
     x: torch.Tensor | ndarray,
     sigma_min: float,
     alpha: float = 1.0,
-    max_sample: int = 5_000,
+    max_sample: int = 8_000,
 ) -> float:
     x = torch.as_tensor(x)
     if x.shape[0] > max_sample:

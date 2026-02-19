@@ -48,6 +48,7 @@ def _cross_cov(
 
 def _select_top_k_eigvec(x: torch.Tensor, rtol: float, atol: float) -> torch.Tensor:
     eigval, eigvec = torch.linalg.eigh(x)
+    print(eigval[-10:])
     tol = max(eigval[-1] * rtol, atol)
     return eigvec[:, eigval > tol]
 
@@ -85,7 +86,7 @@ def null_supervised_pca(
     taus = torch.as_tensor(align_taus)
     taus.div_(taus.sum())
 
-    for tau, rv in zip(align_taus, align_rvs):
+    for tau, rv in zip(taus, align_rvs):
         C = cov_ix(rv).mm(u_null)
         C = C.T.mm(C)
         C.div_(fast_sym_spectral_norm(C) + 1e-7)
