@@ -1,3 +1,4 @@
+from copy import copy
 from typing import NamedTuple
 
 import torch
@@ -43,7 +44,6 @@ class Unsupervised:
         self.sigma_min_x = config.sigma_min_x
         self.smooth_sigma_factor = config.smoother_rff_factor
 
-        self.encoder_batch = config.optim_config.batch_size
         self.mm_batch = config.matmul_batch
 
         self.tau_x = config.tau_x
@@ -51,14 +51,14 @@ class Unsupervised:
         self.evptau_x = config.evp_tau_x
         self.evptau_z = config.evp_tau_z
 
-        self.encoder_config = config.encoder_config
-        self._update_encoder(self.x.shape[1])
+        self._encoder_config = copy(config.encoder_config)
 
         self.optim_factory = optim_factory(config.optim_config)
         self.batch = config.optim_config.batch_size
         self.device = torch.device(config.device)
+        self._encoder = torch.nn.Identity()  # dummy encoder
 
-        self.phi_x = RandomFourierFeature(
+        self._phi_x = RandomFourierFeature(
             self.x.shape[1],
             config.rff_scale_x,
             config.drff_max,
@@ -68,7 +68,7 @@ class Unsupervised:
             self.device,
         )
 
-        self.phi_z = RandomFourierFeature(
+        self._phi_z = RandomFourierFeature(
             config.encoder_config.out_dim,
             config.rff_scale_z,
             config.drff_max,
@@ -78,7 +78,7 @@ class Unsupervised:
             device=self.device,
         )
 
-        self.phi = RandomFourierFeature(
+        self._phi = RandomFourierFeature(
             config.encoder_config.out_dim,
             config.rff_scale,
             config.drff_max,
@@ -102,8 +102,8 @@ class Unsupervised:
 
     def null_dim_reduction(self, tol: float) -> tuple[torch.Tensor, torch.Tensor]:
         # map input with RFF
-        x = self.phi_x(self.x, self.mm_batch)
-        self.x_test = self.phi_x(self.x_test, self.mm_batch)
+        x = self._phi_x(self.x, self.mm_batch)
+        self.x_test = self._phi_x(self.x_test, self.mm_batch)
 
         # perfoming KPCA/SKPCA [depending on erasure scheme] in the null space of Csx
         f = self._dim_reduction(x, tol)
@@ -112,12 +112,12 @@ class Unsupervised:
         self.x = self._update_and_project(f, x, normalize=True)
 
         # update RFF map
-        self.phi_x.change_params(
+        self._phi_x.change_params(
             d_in=f.shape[1], sigma=median_sigma(self.x, self.sigma_min_x)
         )
 
         # update Encoder Parameters
-        self._update_encoder(f.shape[1])
+        self._encoder_config.input_dim = f.shape[1]
         return self.x, self.x_test
 
     def init_erasure(
@@ -125,7 +125,7 @@ class Unsupervised:
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # The very first step for erasure
         data_list = [self.x]
-        phi_list = [self.phi_x]
+        phi_list = [self._phi_x]
         tau_list = [self.tau_x]
         evptau_list = [self.evptau_x]
         z = self._obliviator_step(
@@ -138,7 +138,7 @@ class Unsupervised:
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Normal step (intermediate) for erasure
         data_list = [z, self.x]
-        phi_list = [self.phi_z, self.phi_x]
+        phi_list = [self._phi_z, self._phi_x]
         tau_list = [self.tau_z, self.tau_x]
         evptau_list = [self.evptau_z, self.evptau_x]
 
@@ -151,7 +151,7 @@ class Unsupervised:
         if update_x:
             self.sigma_min_x = self.sigma_min_z
             self.x = z.to(self.x.device)
-            self.phi_x.change_params(
+            self._phi_x.change_params(
                 self.x.shape[1], median_sigma(self.x, self.sigma_min_x)
             )
         return z_new, self.x_test
@@ -172,14 +172,14 @@ class Unsupervised:
         data_split = self._cache_rff(data_list, phi_list, tau_list, evptau_list)
 
         self._train_encoder(input_rv, data_split, epochs)
-        z = self._solve_evp(input_rv, data_split, tol)
+        rv = self._solve_evp(input_rv, data_split, tol)
 
         # intermediate rv is updated, so we update encoder and RFF
-        self._update_encoder(z.shape[1])
-        self.phi_z.change_params(
-            d_in=z.shape[1], sigma=median_sigma(z, self.sigma_min_z)
+        self._encoder_config.input_dim = rv.shape[1]
+        self._phi_z.change_params(
+            d_in=rv.shape[1], sigma=median_sigma(rv, self.sigma_min_z)
         )
-        return z
+        return rv
 
     def _train_encoder(
         self,
@@ -190,7 +190,8 @@ class Unsupervised:
         def scaled_cross_cov_norm(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
             return _cross_cov(x, y, batch=None, device=x.device).square().mean().sqrt()
 
-        optimizer = self.optim_factory(self.encoder.parameters())
+        self._encoder = mlp_factory(self._encoder_config).to(device=self.device)
+        optimizer = self.optim_factory(self._encoder.parameters())
         pbar = trange(epochs)
         N = input_rv.shape[0] - (input_rv.shape[0] % self.batch)
 
@@ -255,17 +256,17 @@ class Unsupervised:
         tol: float,
     ) -> torch.Tensor:
         # for the processed data after caching we put z as the last element
-        w = self._get_embeddings(input_rv, self.encoder_batch)
-        self.x_test = self._get_embeddings(self.x_test, self.encoder_batch)
+        w = self.get_embeddings(input_rv, self.batch)
+        self.x_test = self.get_embeddings(self.x_test, self.batch)
 
-        # update RFF map (not really necessary)
-        self.phi.change_params(
+        # update RFF map (not really necessary, it is only one iteration behind from encoder training)
+        self._phi.change_params(
             sigma=median_sigma(w, self.sigma_min, alpha=self.smooth_sigma_factor)
         )
 
         # map encoder's output using RFF
-        w = self.phi(w, self.mm_batch)
-        self.x_test = self.phi(self.x_test, self.mm_batch)
+        w = self._phi(w, self.mm_batch)
+        self.x_test = self._phi(self.x_test, self.mm_batch)
 
         # map data_list
         evp_data = [
@@ -283,17 +284,12 @@ class Unsupervised:
 
         return self._update_and_project(f, w, True)
 
-    # update encoder after each iteration of erasure
-    def _update_encoder(self, in_dim: int) -> None:
-        self.encoder_config.input_dim = in_dim
-        self.encoder = mlp_factory(self.encoder_config)
-
     # to change encoder architecture
     def change_encoder(self, config: MLPConfig) -> None:
-        if config != self.encoder_config:
-            self.encoder_config = config
-            self.encoder = mlp_factory(config)
-            self.phi.change_params(d_in=config.out_dim, do_resample=False)
+        if config != self._encoder_config:
+            self._encoder_config = copy(config)
+            self._encoder = mlp_factory(config)
+            self._phi.change_params(d_in=config.out_dim, do_resample=False)
 
     # equivalent to f(x) - mu_f
     def _update_and_project(
@@ -367,17 +363,17 @@ class Unsupervised:
         )
 
     def _rff_encoder_embeddings(self, z_batch: torch.Tensor) -> torch.Tensor:
-        w = self.encoder(z_batch)
+        w = self._encoder(z_batch)
         w = w.div(w.norm(dim=1, keepdim=True))
-        self.phi.change_params(
+        self._phi.change_params(
             sigma=median_sigma(w, self.sigma_min, alpha=self.smooth_sigma_factor)
         )
-        return self.phi(w)
+        return self._phi(w)
 
     @torch.no_grad()
-    def _get_embeddings(self, z: torch.Tensor, batch: int) -> torch.Tensor:
+    def get_embeddings(self, z: torch.Tensor, batch: int) -> torch.Tensor:
         def helper(x: torch.Tensor) -> torch.Tensor:
-            x = self.encoder(x.to(device=self.device, non_blocking=True))
+            x = self._encoder(x.to(device=self.device, non_blocking=True))
             return x.div_(x.norm(dim=1, keepdim=True)).to(device=x.device)
 
         return torch.cat(
