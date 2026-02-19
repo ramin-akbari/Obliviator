@@ -2,7 +2,7 @@ from copy import copy
 from typing import NamedTuple
 
 import torch
-from tqdm import trange
+from tqdm import tqdm
 
 from .schemas import MLPConfig, UnsupervisedConfig, UnsupervisedData
 from .utils.kernel import RandomFourierFeature, median_sigma
@@ -192,13 +192,15 @@ class Unsupervised:
 
         self._encoder = mlp_factory(self._encoder_config).to(device=self.device)
         optimizer = self.optim_factory(self._encoder.parameters())
-        pbar = trange(epochs)
+
         N = input_rv.shape[0] - (input_rv.shape[0] % self.batch)
 
         s_buf = torch.empty_like(self.s).pin_memory()
         rv_buf = torch.empty_like(input_rv).pin_memory()
         static_buf = [torch.empty_like(t).pin_memory() for t in data.static_features]
         dynamic_buf = [torch.empty_like(t).pin_memory() for t in data.dynamic_features]
+
+        pbar = tqdm(total=epochs * (N // self.batch))
 
         def shuffle():
             idx = torch.randperm(input_rv.shape[0])
@@ -209,7 +211,7 @@ class Unsupervised:
             for dst, src in zip(dynamic_buf, data.dynamic_features):
                 dst.copy_(src[idx])
 
-        for _ in pbar:
+        for _ in range(epochs):
             shuffle()
             for i in range(0, N, self.batch):
                 optimizer.zero_grad()
@@ -244,10 +246,15 @@ class Unsupervised:
                 loss = hs_s - hs_p
                 loss.backward()
                 optimizer.step()
+                pbar.update()
+                pbar.set_postfix_str(
+                    f"Dep[Unwanted]: {hs_s: <5.2e}     Dep[Utility]: {hs_p: <5.2e}"
+                )
 
             # resample active RFF weights for the next epoch
             for phi in data.dynamic_phis:
                 phi.sample_weights()
+        pbar.close()
 
     def _solve_evp(
         self,

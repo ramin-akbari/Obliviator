@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import torch
 import torch.nn as tnn
-from tqdm import trange
+from tqdm import tqdm
 
 from obliviator.schemas import MLPConfig, OptimConfig
 from obliviator.utils.misc import mlp_factory, optim_factory
@@ -61,18 +61,19 @@ class MLPCrossEntropy:
         self.optimizer = optim_factory(config.optim_config)
         self.train_batch = config.optim_config.batch_size
 
-    def train(self, epoch: int = 100) -> None:
+    def train(self, epochs: int = 100) -> None:
         optim = self.optimizer(self.net.parameters())
-        pbar = trange(epoch)
+
         x_buf = torch.empty_like(self.x).pin_memory()
         y_buf = torch.empty_like(self.y).pin_memory()
-        n = self.x.shape[0] - (self.x.shape[0] % self.train_batch)
-        loss = torch.tensor(0)
-        for _ in pbar:
+        N = self.x.shape[0] - (self.x.shape[0] % self.train_batch)
+
+        pbar = tqdm(total=epochs * (N // self.train_batch))
+        for _ in range(epochs):
             idx = torch.randperm(self.x.shape[0])
             x_buf.copy_(self.x[idx])
             y_buf.copy_(self.y[idx])
-            for i in range(0, n, self.train_batch):
+            for i in range(0, N, self.train_batch):
                 x = x_buf[i : i + self.train_batch].to(
                     device=self.device, non_blocking=True
                 )
@@ -84,11 +85,14 @@ class MLPCrossEntropy:
                 loss = self.loss(logit, y)
                 loss.backward()
                 optim.step()
+                pbar.update()
+                pbar.set_description(
+                    f"{self.name} accuracy: {self.max_acc * 100:<5.2f}    loss:{loss.item():<6.3f}"
+                )
 
             self.max_acc = max(self.accuracy(), self.max_acc)
-            pbar.set_description(
-                f"{self.name} accuracy: {self.max_acc * 100:<5.2f}    loss:{loss.item():<6.3f}"
-            )
+
+        pbar.close()
 
     @torch.no_grad()
     def accuracy(self) -> float:
