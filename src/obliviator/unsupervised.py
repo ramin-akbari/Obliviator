@@ -188,22 +188,28 @@ class Unsupervised:
         epochs: int,
     ):
         def scaled_cross_cov_norm(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-            return _cross_cov(x, y, batch=None, device=x.device).square().mean().sqrt()
+            return (
+                _cross_cov(x, y, batch=None, device=self.device).square().mean().sqrt()
+            )
+
+        def create_buffer(x: torch.Tensor):
+            use_pin = x.device == torch.device("cpu")
+            return torch.empty_like(x, pin_memory=use_pin)
 
         self._encoder = mlp_factory(self._encoder_config).to(device=self.device)
         optimizer = self.optim_factory(self._encoder.parameters())
 
         N = input_rv.shape[0] - (input_rv.shape[0] % self.batch)
 
-        s_buf = torch.empty_like(self.s).pin_memory()
-        rv_buf = torch.empty_like(input_rv).pin_memory()
-        static_buf = [torch.empty_like(t).pin_memory() for t in data.static_features]
-        dynamic_buf = [torch.empty_like(t).pin_memory() for t in data.dynamic_features]
+        s_buf = create_buffer(self.s)
+        rv_buf = create_buffer(input_rv)
+        static_buf = [create_buffer(t) for t in data.static_features]
+        dynamic_buf = [create_buffer(t) for t in data.dynamic_features]
 
         pbar = tqdm(total=epochs * (N // self.batch))
 
         def shuffle():
-            idx = torch.randperm(input_rv.shape[0])
+            idx = torch.randperm(input_rv.shape[0], device=input_rv.device)
             s_buf.copy_(self.s[idx])
             rv_buf.copy_(input_rv[idx])
             for dst, src in zip(static_buf, data.static_features):
@@ -214,7 +220,7 @@ class Unsupervised:
         for _ in range(epochs):
             shuffle()
             for i in range(0, N, self.batch):
-                optimizer.zero_grad()
+                optimizer.zero_grad(set_to_none=True)
                 s = s_buf[i : i + self.batch].to(self.device, non_blocking=True)
                 z = rv_buf[i : i + self.batch].to(self.device, non_blocking=True)
                 static_rv = [
@@ -248,7 +254,7 @@ class Unsupervised:
                 optimizer.step()
                 pbar.update()
                 pbar.set_postfix_str(
-                    f"Dep[Unwanted]: {hs_s: <5.2e}     Dep[Utility]: {hs_p: <5.2e}"
+                    f"Dep[Unwanted]: {hs_s.item(): <5.2e}     Dep[Utility]: {hs_p.item(): <5.2e}"
                 )
 
             # resample active RFF weights for the next epoch

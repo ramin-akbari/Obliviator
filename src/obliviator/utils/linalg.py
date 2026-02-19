@@ -48,14 +48,13 @@ def _cross_cov(
 
 def _select_top_k_eigvec(x: torch.Tensor, rtol: float, atol: float) -> torch.Tensor:
     eigval, eigvec = torch.linalg.eigh(x)
-    print(eigval[-10:])
     tol = max(eigval[-1] * rtol, atol)
     return eigvec[:, eigval > tol]
 
 
 def _find_null(
     C: torch.Tensor,
-    rtol: float = 1e-5,
+    rtol: float = 1e-4,
     atol: float = 2e-7,
 ) -> torch.Tensor:
 
@@ -74,7 +73,7 @@ def null_supervised_pca(
     device: torch.device,
     batch: int | None = None,
     rtol: float = 1e-5,
-    atol: float = 2e-7,
+    atol: float = 1e-6,
 ) -> torch.Tensor:
 
     Csx = _cross_cov(null_rv, target_rv, batch, device)
@@ -110,7 +109,7 @@ def null_pca(
     device: torch.device,
     batch: int | None = None,
     rtol: float = 1e-5,
-    atol: float = 2e-7,
+    atol: float = 1e-6,
 ) -> torch.Tensor:
     Csx = _cross_cov(null_rv, target_rv, batch, device)
     u_null = _find_null(Csx, rtol, atol)
