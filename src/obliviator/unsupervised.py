@@ -188,9 +188,7 @@ class Unsupervised:
         epochs: int,
     ):
         def scaled_cross_cov_norm(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-            return (
-                _cross_cov(x, y, batch=None, device=self.device).square().mean().sqrt()
-            )
+            return _cross_cov(x, y, batch=None, device=self.device).norm(dim=1).mean()
 
         def create_buffer(x: torch.Tensor):
             use_pin = x.device == torch.device("cpu")
@@ -235,7 +233,7 @@ class Unsupervised:
                 w = self._rff_encoder_embeddings(z)
 
                 # s is already cached
-                hs_s = scaled_cross_cov_norm(w, s)
+                hs_s = _cross_cov(w, s, batch=None, device=self.device).norm("fro")
 
                 hs_p = torch.tensor(0.0, device=self.device)
 

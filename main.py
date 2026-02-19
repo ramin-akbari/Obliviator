@@ -15,7 +15,7 @@ print(adv_cls.net)
 print(adv_cls.optimizer)
 
 # adv_cls.update_input(x=x, x_test=x_test)
-adv_cls.train(epoch=1500)
+adv_cls.train(epochs=1500)
 
 # utl_cls.update_input(x=x, x_test=x_test)
-utl_cls.train(epoch=1500)
+utl_cls.train(epochs=1500)
