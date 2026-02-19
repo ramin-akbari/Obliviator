@@ -3,7 +3,7 @@ from typing import override
 import torch
 
 from .schemas import SupervisedConfig, SupervisedData
-from .unsupervised import Unsupervised
+from .unsupervised import DataSplit, Unsupervised
 from .utils.kernel import RandomFourierFeature, median_sigma
 from .utils.linalg import null_supervised_pca
 
@@ -24,7 +24,7 @@ class Supervised(Unsupervised):
                 config.rff_scale_y,
                 config.drff_max,
                 config.drff_min_y,
-                median_sigma(self.y, config.sigma_min_y,alpha=0.9),
+                median_sigma(self.y, config.sigma_min_y, alpha=0.9),
                 False,
                 self.device,
             )
@@ -38,42 +38,15 @@ class Supervised(Unsupervised):
             x, data_list, tau_list, self.s, self.device, self.mm_batch, rtol=tol
         )
 
-    @override
     def _cache_rff(
         self,
         data_list: list[torch.Tensor],
         phi_list: list[RandomFourierFeature],
         tau_list: list[float],
         evptau_list: list[float],
-    ) -> tuple[
-        list[torch.Tensor],
-        list[torch.Tensor],
-        list[RandomFourierFeature],
-        list[float],
-        list[float],
-        list[float],
-        list[float],
-    ]:
-        (
-            cached,
-            not_cached,
-            not_cached_phi,
-            cached_tau,
-            not_cached_tau,
-            cached_evptau,
-            not_cached_evptau,
-        ) = super()._cache_rff(data_list, phi_list, tau_list, evptau_list)
-
-        cached.append(self.y)
-        cached_tau.append(self.tau_y)
-        cached_evptau.append(self.evptau_y)
-
-        return (
-            cached,
-            not_cached,
-            not_cached_phi,
-            cached_tau,
-            not_cached_tau,
-            cached_evptau,
-            not_cached_evptau,
-        )
+    ) -> DataSplit:
+        data = super()._cache_rff(data_list, phi_list, tau_list, evptau_list)
+        data.static_features.append(self.y)
+        data.static_evptaus.append(self.evptau_y)
+        data.static_taus.append(self.tau_y)
+        return data
