@@ -255,7 +255,7 @@ class Unsupervised:
                 dep_u = hs_p.item()
                 scale = dep_s + dep_u
                 pbar_str = f"Normalized Dependency:  {TermColor.BRIGHT_RED} Unwanted:{dep_s / scale: <5.3f}{TermColor.RESET}   {TermColor.BRIGHT_GREEN} Utility:{dep_u / scale: <5.3f}"
-                pbar.bar_format = f"Encoder Training:  [{{n_fmt}}/{{total_fmt}}]|{{bar}}|{{percentage:3.0f}}%| {pbar_str}{TermColor.RESET}"
+                pbar.bar_format = f"Encoder Training|{{bar}}|{{n_fmt}}/{{total_fmt}} [{pbar_str}]{TermColor.RESET}"
                 pbar.set_postfix_str()
 
             # resample active RFF weights for the next epoch
