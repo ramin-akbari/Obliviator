@@ -3,6 +3,7 @@ from evaluation.probing import MLPCrossEntropy, ProbConfig, ProbData
 from obliviator.schemas import (
     SupervisedConfig,
     SupervisedData,
+    TermColor,
     UnsupervisedConfig,
     UnsupervisedData,
 )
@@ -94,6 +95,7 @@ def experiment_factory(
         mlp_config=DeepClassifier(),
         optim_config=ClassifierOptim(),
         name="Utility",
+        color=TermColor.BRIGHT_GREEN,
     )
     utility_cls = classifier_factory(data, cls_config, is_adversary=False)
     cls_config = ProbConfig(
@@ -101,6 +103,7 @@ def experiment_factory(
         mlp_config=DeepClassifier(),
         optim_config=ClassifierOptim(),
         name="Unwanted",
+        color=TermColor.BRIGHT_RED,
     )
     adversary_cls = classifier_factory(data, cls_config, is_adversary=True)
 

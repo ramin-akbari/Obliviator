@@ -4,6 +4,8 @@ from typing import NamedTuple
 import torch
 from tqdm import tqdm
 
+from obliviator.schemas import TermColor
+
 from .schemas import MLPConfig, UnsupervisedConfig, UnsupervisedData
 from .utils.kernel import RandomFourierFeature, median_sigma
 from .utils.linalg import (
@@ -12,8 +14,6 @@ from .utils.linalg import (
     null_supervised_pca,
 )
 from .utils.misc import mlp_factory, optim_factory
-
-NUM_THREADS = 8
 
 
 class DataSplit(NamedTuple):
@@ -204,7 +204,12 @@ class Unsupervised:
         static_buf = [create_buffer(t) for t in data.static_features]
         dynamic_buf = [create_buffer(t) for t in data.dynamic_features]
 
-        pbar = tqdm(total=epochs * (N // self.batch))
+        pbar = tqdm(
+            total=epochs * (N // self.batch),
+            dynamic_ncols=True,
+            bar_format="{desc} {percentage:3.0f}%|{bar}| {postfix}",
+            desc="Encoder Training",
+        )
 
         def shuffle():
             idx = torch.randperm(input_rv.shape[0], device=input_rv.device)
@@ -255,7 +260,7 @@ class Unsupervised:
                 dep_u = hs_p.item()
                 scale = dep_s + dep_u
                 pbar.set_postfix_str(
-                    f"Normalized Dependency|  \033[91m Unwanted: {dep_s / scale: <5.2e}  \033[0m  \033[92m   Utility: {dep_u / scale: <5.2e}"
+                    f"Normalized Dependency|  {TermColor.BRIGHT_RED} Unwanted: {dep_s / scale: <5.2e}{TermColor.RESET}    {TermColor.BRIGHT_GREEN} Utility: {dep_u / scale: <5.2e}"
                 )
 
             # resample active RFF weights for the next epoch

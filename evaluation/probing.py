@@ -5,7 +5,7 @@ import torch
 import torch.nn as tnn
 from tqdm import tqdm
 
-from obliviator.schemas import MLPConfig, OptimConfig
+from obliviator.schemas import MLPConfig, OptimConfig, TermColor
 from obliviator.utils.misc import mlp_factory, optim_factory
 
 
@@ -37,7 +37,7 @@ class ProbConfig:
     mlp_config: MLPConfig = field(default_factory=MLPConfig)
     optim_config: OptimConfig = field(default_factory=OptimConfig)
     name: str = "Classifier"
-    color: str = "#8fce00"  # green  #e06666[red]
+    color: TermColor = TermColor.WHITE
 
 
 class MLPCrossEntropy:
@@ -70,7 +70,13 @@ class MLPCrossEntropy:
         y_buf = torch.empty_like(self.y).pin_memory()
         N = self.x.shape[0] - (self.x.shape[0] % self.train_batch)
 
-        pbar = tqdm(total=epochs * (N // self.train_batch), colour=self.color)
+        pbar = tqdm(
+            total=epochs * (N // self.train_batch),
+            dynamic_ncols=True,
+            bar_format="{desc}: {percentage:3.0f}%|{bar}| {postfix}",
+            desc=self.name,
+        )
+
         for _ in range(epochs):
             idx = torch.randperm(self.x.shape[0])
             x_buf.copy_(self.x[idx])
@@ -89,7 +95,7 @@ class MLPCrossEntropy:
                 optim.step()
                 pbar.update()
                 pbar.set_postfix_str(
-                    f"{self.name} Best Acc: {self.max_acc * 100:<5.2f}    loss:{loss.item():<6.3f}"
+                    f"{self.color} Best Accuracy: {self.max_acc * 100:<5.2f}    Loss: {loss.item():<6.3f}"
                 )
 
             self.max_acc = max(self.accuracy(), self.max_acc)
