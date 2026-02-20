@@ -35,7 +35,14 @@ class Supervised(Unsupervised):
         data_list = [x, self.y]
         tau_list = [self.evptau_x, self.evptau_y]
         return null_supervised_pca(
-            x, data_list, tau_list, self.s, self.device, self.mm_batch, rtol=tol
+            x,
+            data_list,
+            tau_list,
+            self.s,
+            self.device,
+            self.mm_batch,
+            rtol=tol,
+            display_eigs=True,
         )
 
     def _cache_rff(

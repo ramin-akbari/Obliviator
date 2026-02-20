@@ -48,10 +48,19 @@ def _cross_cov(
     return Cxy.div(x.shape[0])
 
 
-def _select_top_k_eigvec(x: torch.Tensor, rtol: float, atol: float) -> torch.Tensor:
+def _select_top_k_eigvec(
+    x: torch.Tensor, rtol: float, atol: float, display_eigs: bool
+) -> torch.Tensor:
     eigval, eigvec = torch.linalg.eigh(x)
     tol = max(eigval[-1] * rtol, atol)
-    return eigvec[:, eigval > tol]
+    eigvec = eigvec[:, eigval > tol]
+    if display_eigs:
+        eigs = (eigval[-8:].clone().flip(dims=0) / eigval[-1]).cpu().tolist()
+        print(
+            f"Normalized eigs: {''.join([f'{e:<4.2e}' for e in eigs])}   Dimension:f{eigvec.shape[1]}"
+        )
+
+    return eigvec
 
 
 def _find_null(
@@ -76,6 +85,7 @@ def null_supervised_pca(
     batch: int | None = None,
     rtol: float = 1e-5,
     atol: float = 1e-6,
+    display_eigs: bool = False,
 ) -> torch.Tensor:
 
     Csx = _cross_cov(null_rv, target_rv, batch, device)
@@ -92,7 +102,7 @@ def null_supervised_pca(
         C = C.T.mm(C)
         C.div_(fast_sym_spectral_norm(C) + 1e-7)
         mat.add_(C.mul_(tau))
-    pcs = _select_top_k_eigvec(mat, rtol, atol)
+    pcs = _select_top_k_eigvec(mat, rtol, atol, display_eigs)
 
     return u_null.mm(pcs)
 
@@ -112,11 +122,12 @@ def null_pca(
     batch: int | None = None,
     rtol: float = 1e-5,
     atol: float = 1e-6,
+    display_eigs: bool = False,
 ) -> torch.Tensor:
     Csx = _cross_cov(null_rv, target_rv, batch, device)
     u_null = _find_null(Csx, rtol, atol)
     C = _cov_mat(target_rv, batch, device)
     C = C.mm(u_null)
     C = u_null.T.mm(C)
-    pcs = _select_top_k_eigvec(C, rtol, atol)
+    pcs = _select_top_k_eigvec(C, rtol, atol, display_eigs)
     return u_null.mm(pcs)

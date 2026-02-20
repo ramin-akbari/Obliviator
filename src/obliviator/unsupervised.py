@@ -157,7 +157,9 @@ class Unsupervised:
         return z_new, self.test_rv
 
     def _dim_reduction(self, x: torch.Tensor, tol: float) -> torch.Tensor:
-        return null_pca(x, self.s, self.device, self.mm_batch, rtol=tol)
+        return null_pca(
+            x, self.s, self.device, self.mm_batch, rtol=tol, display_eigs=True
+        )
 
     def _obliviator_step(
         self,
@@ -172,6 +174,7 @@ class Unsupervised:
         data_split = self._cache_rff(data_list, phi_list, tau_list, evptau_list)
 
         self._train_encoder(input_rv, data_split, epochs)
+        print("Eigen Value step", end="")
         rv = self._solve_evp(input_rv, data_split, tol)
 
         # intermediate rv is updated, so we update encoder and RFF
@@ -254,7 +257,7 @@ class Unsupervised:
                 dep_s = hs_s.item()
                 dep_u = hs_p.item()
                 scale = dep_s + dep_u
-                pbar_str = f"Normalized Dependency|{TermColor.BRIGHT_RED} Unwanted:{dep_s / scale: <5.3f}{TermColor.RESET}   {TermColor.BRIGHT_GREEN}Utility:{dep_u / scale: <5.3f}{TermColor.RESET}"
+                pbar_str = f" Normalized Dependency|{TermColor.BRIGHT_RED} Unwanted:{dep_s / scale: <5.3f}{TermColor.RESET}   {TermColor.BRIGHT_GREEN}Utility:{dep_u / scale: <5.3f}{TermColor.RESET} "
                 pbar.bar_format = (
                     f"Encoder Training|{{bar}}|{{n_fmt}}/{{total_fmt}} [{pbar_str}]"
                 )
@@ -294,7 +297,14 @@ class Unsupervised:
 
         # solve the SKPCA (EVP in the paper) in the nullspace of Csx
         f = null_supervised_pca(
-            w, evp_data, evptau_list, self.s, self.device, self.mm_batch, rtol=tol
+            w,
+            evp_data,
+            evptau_list,
+            self.s,
+            self.device,
+            self.mm_batch,
+            rtol=tol,
+            display_eigs=True,
         )
 
         return self._update_and_project(f, w, True)
