@@ -376,9 +376,9 @@ class Unsupervised:
     def _rff_encoder_embeddings(self, z_batch: torch.Tensor) -> torch.Tensor:
         w = self._encoder(z_batch)
         w = w.div(w.norm(dim=1, keepdim=True))
-        self._phi.change_params(
-            sigma=median_sigma(w, self.sigma_min, alpha=self.smooth_sigma_factor)
-        )
+        with torch.no_grad():
+            sigma = median_sigma(w, self.sigma_min, alpha=self.smooth_sigma_factor)
+            self._phi.change_params(sigma=sigma)
         return self._phi(w)
 
     @torch.no_grad()

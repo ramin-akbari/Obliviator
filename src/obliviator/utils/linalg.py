@@ -22,19 +22,21 @@ def _cov_mat(x: torch.Tensor, batch: int | None, device: torch.device) -> torch.
 def _cross_cov(
     x: torch.Tensor, y: torch.Tensor, batch: int | None, device: torch.device
 ) -> torch.Tensor:
-    mu_x = x.mean(dim=0).to(device=device)
-    # technically not needed, only because of floating-point error in x_mean
-    mu_y = y.mean(dim=0).to(device=device)
 
     if batch is None:
         xd = x.to(device=device)
         yd = y.to(device=device)
+        xd = xd - xd.mean(dim=0)
+        yd = yd - yd.mean(dim=0)
         Cxy = xd.T.mm(yd)
         return Cxy.div(x.shape[0])
 
     batched_x = torch.split(x, batch)
     batched_y = torch.split(y, batch)
     Cxy = torch.zeros(x.shape[1], y.shape[1], device=device)
+    mu_x = x.mean(dim=0).to(device=device)
+    # technically not needed, only because of floating-point error in x_mean
+    mu_y = y.mean(dim=0).to(device=device)
 
     for xb, yb in zip(batched_x, batched_y):
         xb = xb.to(device=device, non_blocking=True)
