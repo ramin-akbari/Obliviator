@@ -58,12 +58,14 @@ class Unsupervised:
         self.device = torch.device(config.device)
         self._encoder = torch.nn.Identity()  # dummy encoder
 
+        print(median_sigma(self.x, config.sigma_min_x, alpha=1.5))
+
         self._phi_x = RandomFourierFeature(
             self.x.shape[1],
             config.rff_scale_x,
             config.drff_max,
             config.drff_min,
-            median_sigma(self.x, config.sigma_min_x),
+            median_sigma(self.x, config.sigma_min_x, alpha=1.25),
             config.resample_x,
             self.device,
         )
@@ -330,7 +332,7 @@ class Unsupervised:
 
             def helper(bx: torch.Tensor):
                 bx = bx.to(device=self.device)
-                return bx.mm(mat).to(device=bx.device)
+                return bx.mm(mat).to(device=x.device)
 
             return torch.cat(
                 [helper(bx) for bx in torch.split(x, self.mm_batch)], dim=0

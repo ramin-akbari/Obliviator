@@ -24,7 +24,7 @@ class Supervised(Unsupervised):
                 config.rff_scale_y,
                 config.drff_max,
                 config.drff_min_y,
-                median_sigma(self.y, config.sigma_min_y, alpha=0.9),
+                median_sigma(self.y, config.sigma_min_y, alpha=0.8),
                 False,
                 self.device,
             )

@@ -24,11 +24,11 @@ def _cov_mat(x: torch.Tensor, batch: int | None, device: torch.device) -> torch.
 def _cross_cov(
     x: torch.Tensor, y: torch.Tensor, batch: int | None, device: torch.device
 ) -> torch.Tensor:
-
     if batch is None:
         xd = x.to(device=device)
         yd = y.to(device=device)
         xd = xd - xd.mean(dim=0)
+        # technically not needed, only because of floating-point error in x_mean
         yd = yd - yd.mean(dim=0)
         Cxy = xd.T.mm(yd)
         return Cxy.div(x.shape[0])
@@ -37,7 +37,7 @@ def _cross_cov(
     batched_y = torch.split(y, batch)
     Cxy = torch.zeros(x.shape[1], y.shape[1], device=device)
     mu_x = x.mean(dim=0).to(device=device)
-    # technically not needed, only because of floating-point error in x_mean
+
     mu_y = y.mean(dim=0).to(device=device)
 
     for xb, yb in zip(batched_x, batched_y):
@@ -75,7 +75,6 @@ def _find_null(
     rtol: float = 1e-4,
     atol: float = 2e-7,
 ) -> torch.Tensor:
-
     _, sigmas, v = torch.linalg.svd(C, full_matrices=False)
     tol = max(rtol * sigmas[0], atol)
     v = v[sigmas > tol].T
@@ -94,7 +93,6 @@ def null_supervised_pca(
     atol: float = 1e-6,
     display_eigs: bool = False,
 ) -> torch.Tensor:
-
     Csx = _cross_cov(null_rv, target_rv, batch, device)
     u_null = _find_null(Csx, rtol, atol)
 
@@ -109,6 +107,7 @@ def null_supervised_pca(
         C = C.T.mm(C)
         C.div_(fast_sym_spectral_norm(C) + 1e-7)
         mat.add_(C.mul_(tau))
+
     pcs = _select_top_k_eigvec(mat, rtol, atol, display_eigs)
 
     return u_null.mm(pcs)

@@ -88,6 +88,10 @@ def experiment_factory(
                 case "gpt2" | "bert":
                     oblv = BaseUnsup()
 
+    oblv.device = exp_config.dev_er.lower()
+    if oblv.device != "cpu":
+        oblv.matmul_batch = 32_768
+
     utility_config = ProbConfig(
         device=exp_config.dev_pb,
         mlp_config=DeepClassifier(),
