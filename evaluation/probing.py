@@ -37,6 +37,7 @@ class ProbConfig:
     mlp_config: MLPConfig = field(default_factory=MLPConfig)
     optim_config: OptimConfig = field(default_factory=OptimConfig)
     name: str = "Classifier"
+    color: str = "#8fce00"  # green  #e06666[red]
 
 
 class MLPCrossEntropy:
@@ -50,6 +51,7 @@ class MLPCrossEntropy:
         self.max_acc = 0
         self.mlp_config = config.mlp_config
         self.name = config.name
+        self.color = config.color
 
         config.mlp_config.input_dim = data.x.shape[1]
         config.mlp_config.out_dim = int(data.y.max().item()) + 1
@@ -68,7 +70,7 @@ class MLPCrossEntropy:
         y_buf = torch.empty_like(self.y).pin_memory()
         N = self.x.shape[0] - (self.x.shape[0] % self.train_batch)
 
-        pbar = tqdm(total=epochs * (N // self.train_batch))
+        pbar = tqdm(total=epochs * (N // self.train_batch), colour=self.color)
         for _ in range(epochs):
             idx = torch.randperm(self.x.shape[0])
             x_buf.copy_(self.x[idx])
@@ -86,8 +88,8 @@ class MLPCrossEntropy:
                 loss.backward()
                 optim.step()
                 pbar.update()
-                pbar.set_description(
-                    f"{self.name} accuracy: {self.max_acc * 100:<5.2f}    loss:{loss.item():<6.3f}"
+                pbar.set_postfix_str(
+                    f"{self.name} Best Acc: {self.max_acc * 100:<5.2f}    loss:{loss.item():<6.3f}"
                 )
 
             self.max_acc = max(self.accuracy(), self.max_acc)

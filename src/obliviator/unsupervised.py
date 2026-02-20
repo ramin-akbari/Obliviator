@@ -239,20 +239,23 @@ class Unsupervised:
 
                 # HSIC for cached inputs, we normalize HSIC based on the dimension of RVs
                 for tau, rv in zip(data.static_taus, static_rv):
-                    hs_p = hs_p + scaled_cross_cov_norm(w, rv).mul(tau)
+                    hs_p = hs_p + scaled_cross_cov_norm(rv, w).mul(tau)
 
                 # HSIC for the not_cached inputs
                 for tau, phi, rv in zip(
                     data.dynamic_taus, data.dynamic_phis, dynamic_rv
                 ):
-                    hs_p = hs_p + scaled_cross_cov_norm(w, phi(rv)).mul(tau)
+                    hs_p = hs_p + scaled_cross_cov_norm(phi(rv), w).mul(tau)
 
                 loss = hs_s - hs_p
                 loss.backward()
                 optimizer.step()
                 pbar.update()
+                dep_s = hs_s.item()
+                dep_u = hs_p.item()
+                scale = dep_s + dep_u
                 pbar.set_postfix_str(
-                    f"Dep[Unwanted]: {hs_s.item(): <5.2e}     Dep[Utility]: {hs_p.item(): <5.2e}"
+                    f"Normalized Dependency|  \033[91m Unwanted: {dep_s / scale: <5.2e}  \033[0m  \033[92m   Utility: {dep_u / scale: <5.2e}"
                 )
 
             # resample active RFF weights for the next epoch
