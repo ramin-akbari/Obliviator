@@ -55,9 +55,9 @@ def _select_top_k_eigvec(
     tol = max(eigval[-1] * rtol, atol)
     eigvec = eigvec[:, eigval > tol]
     if display_eigs:
-        eigs = (eigval[-8:].clone().flip(dims=0) / eigval[-1]).cpu().tolist()
+        eigs = (eigval[-8:].clone().flip(dims=(0,)) / eigval[-1]).cpu().tolist()
         print(
-            f"Normalized eigs: {''.join([f'{e:<4.2e}' for e in eigs])}   Dimension:f{eigvec.shape[1]}"
+            f"Normalized eigs: {''.join([f'{e:<4.2e}' for e in eigs])} |Dimension:f{eigvec.shape[1]}"
         )
 
     return eigvec
