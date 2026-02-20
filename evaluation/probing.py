@@ -31,7 +31,7 @@ class ProbData:
         self.y_test = torch.as_tensor(y_test, dtype=torch.long)
 
 
-@dataclass
+@dataclass(slots=True, kw_only=True)
 class ProbConfig:
     device: str = "cpu"
     mlp_config: MLPConfig = field(default_factory=MLPConfig)
@@ -61,17 +61,17 @@ class MLPCrossEntropy:
         self.net.to(device=self.device)
         self.loss.to(device=self.device)
         self.optimizer = optim_factory(config.optim_config)
-        self.train_batch = config.optim_config.batch_size
+        self.batch = config.optim_config.batch_size
 
     def train(self, epochs: int = 100) -> None:
         optim = self.optimizer(self.net.parameters())
 
         x_buf = torch.empty_like(self.x).pin_memory()
         y_buf = torch.empty_like(self.y).pin_memory()
-        N = self.x.shape[0] - (self.x.shape[0] % self.train_batch)
+        N = self.x.shape[0] - (self.x.shape[0] % self.batch)
 
         pbar = tqdm(
-            total=epochs * (N // self.train_batch),
+            total=epochs * (N // self.batch),
             dynamic_ncols=True,
         )
 
@@ -79,13 +79,9 @@ class MLPCrossEntropy:
             idx = torch.randperm(self.x.shape[0])
             x_buf.copy_(self.x[idx])
             y_buf.copy_(self.y[idx])
-            for i in range(0, N, self.train_batch):
-                x = x_buf[i : i + self.train_batch].to(
-                    device=self.device, non_blocking=True
-                )
-                y = y_buf[i : i + self.train_batch].to(
-                    device=self.device, non_blocking=True
-                )
+            for i in range(0, N, self.batch):
+                x = x_buf[i : i + self.batch].to(device=self.device, non_blocking=True)
+                y = y_buf[i : i + self.batch].to(device=self.device, non_blocking=True)
                 optim.zero_grad()
                 logit = self.net(x)
                 loss = self.loss(logit, y)
@@ -106,7 +102,7 @@ class MLPCrossEntropy:
         prd = torch.cat(
             [
                 self.net(x.to(self.device)).argmax(dim=1).to(self.y_test.device)
-                for x in torch.split(self.x_test, self.train_batch * 2)
+                for x in torch.split(self.x_test, self.batch * 2)
             ]
         )
         self.net.train()

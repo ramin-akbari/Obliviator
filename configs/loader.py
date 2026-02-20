@@ -4,10 +4,14 @@ from pathlib import Path
 import torch
 from huggingface_hub import hf_hub_download
 
-from .schemas import Experiment, RawData
+from .schemas import Expr, RawData
 
 
-def load_experimental_data(config: Experiment) -> RawData:
+def user_loader(adr: Path) -> RawData:
+    raise NotImplementedError()
+
+
+def load_experimental_data(config: Expr) -> RawData:
     local_dir = Path("./data").resolve()
     file = local_dir / f"{config.model}_{config.data}.pt"
 
@@ -38,7 +42,3 @@ def load_experimental_data(config: Experiment) -> RawData:
         repo_id=repo_id, filename=filename, local_dir=local_dir, repo_type="dataset"
     )
     return RawData(**torch.load(downloaded_str))
-
-
-def user_loader(adr: Path) -> RawData:
-    raise NotImplementedError()

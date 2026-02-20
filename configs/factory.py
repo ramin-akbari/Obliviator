@@ -19,14 +19,14 @@ from .defaults import (
     LargeSup,
     LargeUnsup,
 )
-from .loader import load_experimental_data
-from .schemas import Experiment, RawData
+from .loader import load_experimental_data, user_loader
+from .schemas import Expr, RawData, Sup, Tol, Unsup
 
 type ObliviatorConfig = UnsupervisedConfig | SupervisedConfig
 type Eraser = Supervised | Unsupervised
 
 
-def classifier_factory(
+def build_classifier(
     raw_data: RawData, config: ProbConfig, is_adversary: bool
 ) -> MLPCrossEntropy:
     if is_adversary:
@@ -46,7 +46,7 @@ def classifier_factory(
     return MLPCrossEntropy(data, config)
 
 
-def obliviator_factory(
+def build_obliviator(
     raw_data: RawData, config: ObliviatorConfig
 ) -> obliviator.Supervised | obliviator.Unsupervised:
     match config:
@@ -67,16 +67,13 @@ def obliviator_factory(
 
 
 def experiment_factory(
-    exp_config: Experiment,
-) -> tuple[
-    Eraser,
-    MLPCrossEntropy,
-    MLPCrossEntropy,
-]:
+    exp_config: Expr,
+) -> tuple[Eraser, MLPCrossEntropy, MLPCrossEntropy, Tol]:
     data = load_experimental_data(exp_config)
 
     match exp_config.mode:
         case "sup":
+            tol = Tol(dim_reduction=1e-5, evp=1e-5)
             match exp_config.model:
                 case "deepseek" | "llama":
                     oblv = LargeSup()
@@ -84,29 +81,43 @@ def experiment_factory(
                     oblv = BaseSup()
 
         case "unsup":
+            tol = Tol(dim_reduction=5e-4, evp=2e-5)
             match exp_config.model:
                 case "deepseek" | "llama":
                     oblv = LargeUnsup()
                 case "gpt2" | "bert":
                     oblv = BaseUnsup()
 
-    cls_config = ProbConfig(
-        device=exp_config.probing_device,
+    utility_config = ProbConfig(
+        device=exp_config.dev_pb,
         mlp_config=DeepClassifier(),
         optim_config=ClassifierOptim(),
         name="Utility",
         color=TermColor.BRIGHT_GREEN,
     )
-    utility_cls = classifier_factory(data, cls_config, is_adversary=False)
-    cls_config = ProbConfig(
-        device=exp_config.probing_device,
+
+    unwanted_config = ProbConfig(
+        device=exp_config.dev_pb,
         mlp_config=DeepClassifier(),
         optim_config=ClassifierOptim(),
         name="Unwanted",
         color=TermColor.BRIGHT_RED,
     )
-    adversary_cls = classifier_factory(data, cls_config, is_adversary=True)
 
-    eraser = obliviator_factory(data, oblv)
+    adversary_cls = build_classifier(data, unwanted_config, is_adversary=True)
+    utility_cls = build_classifier(data, utility_config, is_adversary=False)
+    eraser = build_obliviator(data, oblv)
 
-    return eraser, adversary_cls, utility_cls
+    return eraser, adversary_cls, utility_cls, tol
+
+
+def user_factory(
+    cfg: Unsup | Sup,
+) -> tuple[Eraser, MLPCrossEntropy, MLPCrossEntropy, Tol]:
+    oblv = cfg.eraser
+    data = user_loader(cfg.adr)
+    eraser = build_obliviator(data, oblv)
+    adversary_cls = build_classifier(data, cfg.cls_un, is_adversary=True)
+    utility_cls = build_classifier(data, cfg.cls_ut, is_adversary=False)
+    tol = Tol(cfg.tol_dim, cfg.tol_evp)
+    return eraser, adversary_cls, utility_cls, tol

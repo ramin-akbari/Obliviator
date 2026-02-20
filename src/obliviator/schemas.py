@@ -5,33 +5,6 @@ import numpy as np
 import torch
 
 
-@dataclass(slots=True, kw_only=True)
-class OptimConfig:
-    """Optimizer Configuration [Adam,AdamN,AdamW,NAdamW,SGD]"""
-
-    lr: float = 2e-3
-    """Learning Rate"""
-    weight_decay: float = 0.001
-    """Weight Decay or Regularizer"""
-    batch_size: int = 1024
-    """Batch Size"""
-    use_adaptive_momentum: bool = True
-    """Switches to Adam Variants"""
-    decoupled_weight_decay: bool = True
-    """Switches to AdamW Variants"""
-    use_nesterov: bool = True
-    """- With Adam is Equivalent to NAdamW
-       - With SGD is Equivalent to Nesterov Momentum"""
-    beta_1: float = 0.85
-    """Momentum Coefficient"""
-    beta_2: float = 0.999
-    """Squared Momentum Coefficient"""
-    epsilon: float = 1e-8
-    """Stablizer"""
-    momentum_decay: float = 4e-3
-    """Decaying momentum in NAdam or NAdamW"""
-
-
 class TermColor(StrEnum):
     BLACK = "\033[30m"
     RED = "\033[31m"
@@ -61,6 +34,33 @@ class ActivationType(StrEnum):
 
 
 @dataclass(slots=True, kw_only=True)
+class OptimConfig:
+    """Optimizer Configuration [Adam,AdamN,AdamW,NAdamW,SGD]"""
+
+    lr: float = 2e-3
+    """Learning Rate"""
+    weight_decay: float = 0.001
+    """Weight Decay or Regularizer"""
+    batch_size: int = 1024
+    """Batch Size"""
+    use_adaptive_momentum: bool = True
+    """Switches to Adam Variants"""
+    decoupled_weight_decay: bool = True
+    """Switches to AdamW Variants"""
+    use_nesterov: bool = True
+    """- With Adam is Equivalent to NAdamW
+       - With SGD is Equivalent to Nesterov Momentum"""
+    beta_1: float = 0.85
+    """Momentum Coefficient"""
+    beta_2: float = 0.999
+    """Squared Momentum Coefficient"""
+    epsilon: float = 1e-8
+    """Stablizer"""
+    momentum_decay: float = 4e-3
+    """Decaying momentum in NAdam or NAdamW"""
+
+
+@dataclass(slots=True, kw_only=True)
 class MLPConfig:
     """MLP Configuration used in Eraser-Encoder or Probing-Encoder"""
 
@@ -82,16 +82,16 @@ class MLPConfig:
 class UnsupervisedConfig:
     """Unsupervised Erasure Config. Erasure Process:  x->....->z->Encoder->w"""
 
-    drff_min: int = 1000
+    drff_min: int = 1024
     """min number of Random Fourier Features used to estimate HSIC and solve EVP """
-    drff_max: int = 5000
+    drff_max: int = 4096
     """max number of Random Fourier Features used to estimate HSIC and solve EVP """
 
-    rff_scale: int = 4
+    rff_scale: int = 5
     """Scale Factor for Random Fourier Features for Current RV [w]"""
-    rff_scale_x: int = 6
+    rff_scale_x: int = 8
     """Scale Factor for Random Fourier Features for Initial RV [x]"""
-    rff_scale_z: int = 6
+    rff_scale_z: int = 10
     """Scale Factor for Random Fourier Features for Previous RV [z]"""
 
     sigma_min: float = 1.75
@@ -102,9 +102,9 @@ class UnsupervisedConfig:
     """Min value for sigma based on Median Heuristic for RV [z]"""
 
     resample_x: bool = False
-    """Resampling Random Fourier Features After each epoch [use if x requires high dimensional RFF]"""
+    """Resampling Random Fourier Features After each epoch [use if you use low dimension for RFF(x)]"""
     resample_z: bool = False
-    """Resampling Random Fourier Features After each epoch [use if z requires high dimensional RFF]"""
+    """Resampling Random Fourier Features After each epoch [use if you use low dimension for RFF(z)]"""
 
     smoother_rff_factor: float = 1.5
     """Make sigma [w] smoother during encoder training"""
@@ -118,9 +118,9 @@ class UnsupervisedConfig:
     rff_scale_s: int = 20
     """Scale Factor for Random Fourier Features for RV [s]"""
 
-    tau_z: float = 0.05
+    tau_z: float = 0.1
     """coefficient of HSIC(z,w)"""
-    tau_x: float = 0.01
+    tau_x: float = 0.1
     """coefficient of HSIC(x,w)"""
 
     evp_tau_z: float = 1
@@ -139,13 +139,19 @@ class UnsupervisedConfig:
 
 @dataclass(slots=True, kw_only=True)
 class SupervisedConfig(UnsupervisedConfig):
-    tau_y: float = 4
+    rff_scale_x: int = 5
+    """Scale Factor for Random Fourier Features for Initial RV [x]"""
+    rff_scale_z: int = 6
+    """Scale Factor for Random Fourier Features for Previous RV [z]"""
+    evp_tau_x: float = 0.2
+    """coefficient of Cov(x,w) in EVP"""
+    tau_y: float = 2
     """coefficient of HSIC(y,w)"""
     evp_tau_y: float = 2
     """coefficient of Cov(y,w) in EVP"""
     use_rff_y: bool = True
     """Use RFF for Y, if Y is binary is not required"""
-    sigma_min_y: float = 0.7
+    sigma_min_y: float = 0.8
     """Min value for sigma based on Median Heuristic for RV [y]"""
     drff_min_y: int = 100
     """min number of Random Fourier Features for RV [y]"""

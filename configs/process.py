@@ -1,21 +1,14 @@
 from evaluation.probing import MLPCrossEntropy
 
-from .factory import Eraser, classifier_factory, experiment_factory, obliviator_factory
-from .loader import user_loader
-from .schemas import Experiment, InputConfig
+from .factory import Eraser, experiment_factory, user_factory
+from .schemas import Expr, InputConfig, Tol
 
 
 def process_args(
     cfg: InputConfig,
-) -> tuple[Eraser, MLPCrossEntropy, MLPCrossEntropy]:
+) -> tuple[Eraser, MLPCrossEntropy, MLPCrossEntropy, Tol]:
     match cfg:
-        case Experiment():
+        case Expr():
             return experiment_factory(cfg)
         case _:
-            oblv = cfg.eraser
-            data = user_loader(cfg.data_adr)
-            eraser = obliviator_factory(data, oblv)
-            adversary_cls = classifier_factory(data, cfg.prob_config, is_adversary=True)
-            utility_cls = classifier_factory(data, cfg.prob_config, is_adversary=False)
-
-    return eraser, adversary_cls, utility_cls
+            return user_factory(cfg)

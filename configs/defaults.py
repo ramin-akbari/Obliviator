@@ -12,16 +12,16 @@ from obliviator.schemas import (
 @dataclass(slots=True)
 class DeepClassifier(MLPConfig):
     use_projection: bool = True
-    hidden_dim: int = 512
-    n_layer: int = 1
+    hidden_dim: int = 128
+    n_layer: int = 4
     activation: ActivationType = ActivationType.SILU
 
 
 @dataclass(slots=True)
 class ClassifierOptim(OptimConfig):
-    batch_size: int = 250_000
+    batch_size: int = 4096
     weight_decay: float = 0.01
-    lr: float = 5e-3
+    lr: float = 4e-3
     use_nesterov: bool = False
 
 
@@ -31,13 +31,13 @@ class EraserEncoder(MLPConfig):
     hidden_dim: int = 512
     out_dim: int = 512
     n_layer: int = 1
-    activation: ActivationType = ActivationType.SILU
+    activation: ActivationType = ActivationType.GELU
 
 
 @dataclass(slots=True)
 class EraserOptim(OptimConfig):
     batch_size: int = 16_384
-    weight_decay: float = 0.01
+    weight_decay: float = 0.05
     lr: float = 5e-4
     use_nesterov: bool = False
 
@@ -50,11 +50,11 @@ class BaseUnsup(UnsupervisedConfig):
 
 @dataclass(slots=True)
 class LargeUnsup(BaseUnsup):
-    drff_max: int = 6500
+    drff_max: int = 8000
     drff_min: int = 1500
-    sigma_min: float = 1.75
-    sigma_min_x: float = 3
-    sigma_min_z: float = 1.5
+    sigma_min: float = 2
+    sigma_min_x: float = 3.5
+    sigma_min_z: float = 1.75
     evp_tau_x: float = 0.15
 
 
@@ -66,10 +66,10 @@ class BaseSup(SupervisedConfig):
 
 @dataclass(slots=True)
 class LargeSup(BaseSup):
-    drff_max: int = 6500
+    drff_max: int = 8000
     drff_min: int = 1500
-    sigma_min: float = 1.75
+    sigma_min: float = 2
     sigma_min_x: float = 3
-    sigma_min_z: float = 1.5
+    sigma_min_z: float = 2
     evp_tau_x: float = 0.15
-    evp_tau_y: float = 2.5
+    evp_tau_y: float = 2
