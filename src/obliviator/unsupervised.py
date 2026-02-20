@@ -259,7 +259,7 @@ class Unsupervised:
                 dep_s += hs_s.item()
                 dep_u += hs_p.item()
                 scale = dep_s + dep_u
-                pbar_str = f" Normalized Dependency|{TermColor.BRIGHT_RED} Unwanted:{dep_s / scale * 100: <5.2f}%{TermColor.RESET}   {TermColor.BRIGHT_GREEN}Utility:{dep_u / scale * 100: <5.2f}%{TermColor.RESET} "
+                pbar_str = f" Normalized Dependency|{TermColor.BRIGHT_RED} Unwanted:{f'{dep_s / scale * 100: <.2f}%':<5}{TermColor.RESET}   {TermColor.BRIGHT_GREEN}Utility:{f'{dep_u / scale * 100: <.2f}%':<5}{TermColor.RESET} "
                 pbar.bar_format = (
                     f"Encoder Training|{{bar}}|{{n_fmt}}/{{total_fmt}} [{pbar_str}]"
                 )

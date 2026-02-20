@@ -2,6 +2,8 @@ from functools import partial
 
 import torch
 
+from obliviator.schemas import TermColor
+
 
 def _cov_mat(x: torch.Tensor, batch: int | None, device: torch.device) -> torch.Tensor:
     if batch is None:
@@ -62,7 +64,7 @@ def _select_top_k_eigvec(
             f"{f'{e:<.2f}%':<5}" for e in eigs.div_(eigval.sum()).mul_(100).tolist()
         ]
         print(
-            f"Eigs Weight Distribution : {', '.join(eigs)}| Dimension:{eigvec.shape[1]}"
+            f"Eigs Weight Distribution : {', '.join(eigs)}| {TermColor.BRIGHT_YELLOW}Dimension:{eigvec.shape[1]}{TermColor.RESET}"
         )
 
     return eigvec
