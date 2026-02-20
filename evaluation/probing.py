@@ -92,8 +92,8 @@ class MLPCrossEntropy:
                 loss.backward()
                 optim.step()
                 pbar.update()
-                pbar_str = f"Best Accuracy: {self.max_acc * 100:<5.2f}    Loss: {loss.item():<6.3f}"
-                pbar.bar_format = f"{self.color}{{desc}}: [{{n_fmt}}/{{total_fmt}}]|{{bar}}|{{percentage:3.0f}}% {pbar_str}{TermColor.RESET}"
+                pbar_str = f"Best Accuracy:{self.max_acc * 100:<5.2f}   Loss:{loss.item():<6.3f}"
+                pbar.bar_format = f"{self.color}{self.name}: [{{n_fmt}}/{{total_fmt}}]|{{bar}}|{{percentage:3.0f}}% | {pbar_str}{TermColor.RESET}"
 
             self.max_acc = max(self.accuracy(), self.max_acc)
 
