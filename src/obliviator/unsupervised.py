@@ -207,7 +207,6 @@ class Unsupervised:
         pbar = tqdm(
             total=epochs * (N // self.batch),
             dynamic_ncols=True,
-            bar_format="{desc} {percentage:3.0f}%|{bar}| {postfix}",
             desc="Encoder Training",
         )
 
@@ -259,9 +258,9 @@ class Unsupervised:
                 dep_s = hs_s.item()
                 dep_u = hs_p.item()
                 scale = dep_s + dep_u
-                pbar.set_postfix_str(
-                    f"Normalized Dependency|  {TermColor.BRIGHT_RED} Unwanted: {dep_s / scale: <5.2e}{TermColor.RESET}    {TermColor.BRIGHT_GREEN} Utility: {dep_u / scale: <5.2e}"
-                )
+                pbar_str = f"Normalized Dependency|  {TermColor.BRIGHT_RED} Unwanted: {dep_s / scale: <5.3f}{TermColor.RESET}    {TermColor.BRIGHT_GREEN} Utility: {dep_u / scale: <5.3f}"
+                pbar.bar_format = f"{{desc}}: {{percentage:3.0f}}%|{{bar}}| {pbar_str}{TermColor.RESET}"
+                pbar.set_postfix_str()
 
             # resample active RFF weights for the next epoch
             for phi in data.dynamic_phis:

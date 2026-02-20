@@ -73,8 +73,6 @@ class MLPCrossEntropy:
         pbar = tqdm(
             total=epochs * (N // self.train_batch),
             dynamic_ncols=True,
-            bar_format="{desc}: {percentage:3.0f}%|{bar}| {postfix}",
-            desc=self.name,
         )
 
         for _ in range(epochs):
@@ -94,9 +92,8 @@ class MLPCrossEntropy:
                 loss.backward()
                 optim.step()
                 pbar.update()
-                pbar.set_postfix_str(
-                    f"{self.color} Best Accuracy: {self.max_acc * 100:<5.2f}    Loss: {loss.item():<6.3f}"
-                )
+                pbar_str = f"Best Accuracy: {self.max_acc * 100:<5.2f}    Loss: {loss.item():<6.3f}"
+                pbar.bar_format = f"{self.color}{{desc}}: {{percentage:3.0f}}%|{{bar}}| {pbar_str}{TermColor.RESET}"
 
             self.max_acc = max(self.accuracy(), self.max_acc)
 
