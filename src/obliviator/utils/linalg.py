@@ -53,11 +53,12 @@ def _select_top_k_eigvec(
 ) -> torch.Tensor:
     eigval, eigvec = torch.linalg.eigh(x)
     tol = max(eigval[-1] * rtol, atol)
-    eigvec = eigvec[:, eigval > tol]
+    mask = eigval > tol
+    eigvec = eigvec[:, mask]
     if display_eigs:
-        eigs = (eigval[-8:].clone().flip(dims=(0,)) / eigval[-1]).cpu().tolist()
+        eigs = (eigval[mask][-8:].flip(dims=(0,)) / eigval[-1]).cpu().tolist()
         print(
-            f"Normalized eigs: {''.join([f'{e:<4.2e}' for e in eigs])} |Dimension:f{eigvec.shape[1]}"
+            f"Normalized eigs: {', '.join([f'{e:<6.4f}' for e in eigs])} |Dimension:{eigvec.shape[1]}"
         )
 
     return eigvec
