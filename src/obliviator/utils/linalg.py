@@ -57,9 +57,8 @@ def _select_top_k_eigvec(
     eigvec = eigvec[:, mask]
     if display_eigs:
         eigs = (eigval[mask][-8:].flip(dims=(0,)) / eigval[-1]).cpu().tolist()
-        print(
-            f"Normalized eigs: {', '.join([f'{e:<6.4f}' for e in eigs])} |Dimension:{eigvec.shape[1]}"
-        )
+        eigs = [f"{e:<6.4f}" for e in eigs]
+        print(f"Top {len(eigs)} Eigs: {', '.join(eigs)}| Dimension:{eigvec.shape[1]}")
 
     return eigvec
 

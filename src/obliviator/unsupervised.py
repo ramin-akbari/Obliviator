@@ -174,7 +174,7 @@ class Unsupervised:
         data_split = self._cache_rff(data_list, phi_list, tau_list, evptau_list)
 
         self._train_encoder(input_rv, data_split, epochs)
-        print("Eigen Value step", end="")
+        print("Eigen Value Step|", end=" ")
         rv = self._solve_evp(input_rv, data_split, tol)
 
         # intermediate rv is updated, so we update encoder and RFF
