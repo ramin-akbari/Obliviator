@@ -37,7 +37,7 @@ class Unsupervised:
     ) -> None:
         self.x = data.x
         self.s = data.s
-        self.x_test = data.x_test
+        self.test_rv = data.x_test
 
         self.sigma_min = config.sigma_min
         self.sigma_min_z = config.sigma_min_z
@@ -103,7 +103,7 @@ class Unsupervised:
     def null_dim_reduction(self, tol: float) -> tuple[torch.Tensor, torch.Tensor]:
         # map input with RFF
         x = self._phi_x(self.x, self.mm_batch)
-        self.x_test = self._phi_x(self.x_test, self.mm_batch)
+        self.test_rv = self._phi_x(self.test_rv, self.mm_batch)
 
         # perfoming KPCA/SKPCA [depending on erasure scheme] in the null space of Csx
         f = self._dim_reduction(x, tol)
@@ -118,7 +118,7 @@ class Unsupervised:
 
         # update Encoder Parameters
         self._encoder_config.input_dim = f.shape[1]
-        return self.x, self.x_test
+        return self.x, self.test_rv
 
     def init_erasure(
         self, tol: float, epochs: int
@@ -131,7 +131,7 @@ class Unsupervised:
         z = self._obliviator_step(
             self.x, data_list, phi_list, tau_list, evptau_list, epochs, tol
         )
-        return z, self.x_test
+        return z, self.test_rv
 
     def erasure_step(
         self, z: torch.Tensor, tol: float, epochs: int, update_x: bool = False
@@ -154,7 +154,7 @@ class Unsupervised:
             self._phi_x.change_params(
                 self.x.shape[1], median_sigma(self.x, self.sigma_min_x)
             )
-        return z_new, self.x_test
+        return z_new, self.test_rv
 
     def _dim_reduction(self, x: torch.Tensor, tol: float) -> torch.Tensor:
         return null_pca(x, self.s, self.device, self.mm_batch, rtol=tol)
@@ -268,7 +268,7 @@ class Unsupervised:
     ) -> torch.Tensor:
         # for the processed data after caching we put z as the last element
         w = self.get_embeddings(input_rv, self.batch)
-        self.x_test = self.get_embeddings(self.x_test, self.batch)
+        self.test_rv = self.get_embeddings(self.test_rv, self.batch)
 
         # update RFF map (not really necessary, it is only one iteration behind from encoder training)
         self._phi.change_params(
@@ -277,7 +277,7 @@ class Unsupervised:
 
         # map encoder's output using RFF
         w = self._phi(w, self.mm_batch)
-        self.x_test = self._phi(self.x_test, self.mm_batch)
+        self.test_rv = self._phi(self.test_rv, self.mm_batch)
 
         # map data_list
         evp_data = [
@@ -304,7 +304,7 @@ class Unsupervised:
 
     # equivalent to f(x) - mu_f
     def _update_and_project(
-        self, f: torch.Tensor, x: torch.Tensor, normalize: bool = True
+        self, f: torch.Tensor, input_rv: torch.Tensor, normalize: bool = True
     ) -> torch.Tensor:
         # we assume f is already on the device [since it is the solution of evp]
         def project(x: torch.Tensor, mat: torch.Tensor) -> torch.Tensor:
@@ -320,20 +320,20 @@ class Unsupervised:
                 [helper(bx) for bx in torch.split(x, self.mm_batch)], dim=0
             )
 
-        mu = x.mean(dim=0)
+        mu = input_rv.mean(dim=0)
 
         # update input
-        x.sub_(mu)
-        x = project(x=x, mat=f)
+        input_rv.sub_(mu)
+        input_rv = project(x=input_rv, mat=f)
 
         # update test
-        self.x_test.sub_(mu)
-        self.x_test = project(x=self.x_test, mat=f)
+        self.test_rv.sub_(mu)
+        self.test_rv = project(x=self.test_rv, mat=f)
 
         if normalize:
-            x.div_(x.norm(dim=1, keepdim=True))
-            self.x_test.div_(self.x_test.norm(dim=1, keepdim=True))
-        return x
+            input_rv.div_(input_rv.norm(dim=1, keepdim=True))
+            self.test_rv.div_(self.test_rv.norm(dim=1, keepdim=True))
+        return input_rv
 
     def _cache_rff(
         self,
@@ -382,12 +382,12 @@ class Unsupervised:
         return self._phi(w)
 
     @torch.no_grad()
-    def get_embeddings(self, z: torch.Tensor, batch: int) -> torch.Tensor:
+    def get_embeddings(self, input_rv: torch.Tensor, batch: int) -> torch.Tensor:
         def helper(x: torch.Tensor) -> torch.Tensor:
-            x = self._encoder(x.to(device=self.device, non_blocking=True))
-            return x.div_(x.norm(dim=1, keepdim=True)).to(device=x.device)
+            z = self._encoder(x.to(device=self.device, non_blocking=True))
+            return z.div_(z.norm(dim=1, keepdim=True)).to(device=x.device)
 
         return torch.cat(
-            [helper(z_batched) for z_batched in torch.split(z, batch, dim=0)],
+            [helper(z_batched) for z_batched in torch.split(input_rv, batch, dim=0)],
             dim=0,
         )
