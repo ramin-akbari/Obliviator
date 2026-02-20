@@ -58,7 +58,9 @@ def _select_top_k_eigvec(
     if display_eigs:
         eigval = eigval[mask].cpu()
         eigs = eigval[-5:].flip(dims=(0,))
-        eigs = [f"{e:<5.2f}%" for e in eigs.div_(eigval.sum()).mul_(100).tolist()]
+        eigs = [
+            f"{f'{e:<.2f}%':<5}" for e in eigs.div_(eigval.sum()).mul_(100).tolist()
+        ]
         print(
             f"Eigs Weight Distribution : {', '.join(eigs)}| Dimension:{eigvec.shape[1]}"
         )

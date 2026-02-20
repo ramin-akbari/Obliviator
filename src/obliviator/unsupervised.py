@@ -220,6 +220,8 @@ class Unsupervised:
 
         for _ in range(epochs):
             shuffle()
+            dep_s = 0
+            dep_u = 0
             for i in range(0, N, self.batch):
                 optimizer.zero_grad(set_to_none=True)
                 s = s_buf[i : i + self.batch].to(self.device, non_blocking=True)
@@ -254,8 +256,8 @@ class Unsupervised:
                 loss.backward()
                 optimizer.step()
                 pbar.update()
-                dep_s = hs_s.item()
-                dep_u = hs_p.item()
+                dep_s += hs_s.item()
+                dep_u += hs_p.item()
                 scale = dep_s + dep_u
                 pbar_str = f" Normalized Dependency|{TermColor.BRIGHT_RED} Unwanted:{dep_s / scale * 100: <5.2f}%{TermColor.RESET}   {TermColor.BRIGHT_GREEN}Utility:{dep_u / scale * 100: <5.2f}%{TermColor.RESET} "
                 pbar.bar_format = (
