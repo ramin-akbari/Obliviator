@@ -25,7 +25,8 @@ def cls_helper(unwanted_cls, utility_cls):
 
     return helper_update, helper_accuracy
 
-def main()
+
+def main():
     cfg = tyro.cli(InputConfig)
     eraser, adv_cls, utl_cls, tol = process_args(cfg)
     update_cls, update_accuracy = cls_helper(adv_cls, utl_cls)
@@ -44,7 +45,6 @@ def main()
     update_cls(z, z_test)
     update_accuracy(epochs=MAX_EPOCHES)
 
-
     print(f"\n{REPORT_COLOR}[Starting Iterative Erasure]{TermColor.RESET}\n")
     print(f"{REPORT_COLOR}[Iteration 1]{TermColor.RESET}")
 
@@ -56,7 +56,7 @@ def main()
     it = 1
 
     # Iterative Erasure
-    while(unwanted_acc > TARGET_ACC and it<MAX_ITER)
+    while unwanted_acc > TARGET_ACC and it < MAX_ITER:
         it += 1
         print(f"\n{REPORT_COLOR}[Iteration {it}]{TermColor.RESET}")
         z, z_test = eraser.erasure_step(z=z, epochs=ENCODER_EPOCH, tol=tol.evp)
@@ -64,5 +64,6 @@ def main()
         update_cls(z, z_test)
         update_accuracy(epochs=MAX_EPOCHES)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
