@@ -8,15 +8,15 @@ from obliviator.schemas import TermColor
 
 REPORT_COLOR = TermColor.BRIGHT_MAGENTA
 ENCODER_EPOCH = 5
-MAX_EPOCHES = 200
+MAX_EPOCHS = 200
 MAX_ITER = 15
 TARGET_ACC = 0.6
 
 
 def cls_helper(unwanted_cls, utility_cls):
     def helper_update(z, z_test):
-        unwanted_cls.update_input(z, z_test)
-        utility_cls.update_input(z, z_test)
+        unwanted_cls.update_input(x=z, x_test=z_test)
+        utility_cls.update_input(x=z, x_test=z_test)
 
     def helper_accuracy(epochs):
         unwanted_cls.train(epochs)
@@ -37,13 +37,13 @@ def main():
 
     # Perform Dimensionality Reduction on Data
     print(
-        f"\n{REPORT_COLOR}[ Dimensionality Reduction | Original Dimesnion:{eraser.x.shape[1]}]{TermColor.RESET}"
+        f"\n{REPORT_COLOR}[ Dimensionality Reduction | Original Dimension:{eraser.x.shape[1]}]{TermColor.RESET}"
     )
     z, z_test = eraser.null_dim_reduction(tol.dim_reduction)
     print()
     # Accuracy after Dim reduction
     update_cls(z, z_test)
-    update_accuracy(epochs=MAX_EPOCHES)
+    update_accuracy(epochs=MAX_EPOCHS)
 
     print(f"\n{REPORT_COLOR}[Starting Iterative Erasure]{TermColor.RESET}\n")
     print(f"{REPORT_COLOR}[Iteration 1]{TermColor.RESET}")
@@ -52,7 +52,7 @@ def main():
     z, z_test = eraser.init_erasure(epochs=ENCODER_EPOCH, tol=tol.evp)
     print()
     update_cls(z, z_test)
-    unwanted_acc = update_accuracy(epochs=MAX_EPOCHES)
+    unwanted_acc = update_accuracy(epochs=MAX_EPOCHS)
     it = 1
 
     # Iterative Erasure
@@ -62,7 +62,7 @@ def main():
         z, z_test = eraser.erasure_step(z=z, epochs=ENCODER_EPOCH, tol=tol.evp)
         print()
         update_cls(z, z_test)
-        update_accuracy(epochs=MAX_EPOCHES)
+        update_accuracy(epochs=MAX_EPOCHS)
 
 
 if __name__ == "__main__":

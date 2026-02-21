@@ -54,10 +54,10 @@ class MLPCrossEntropy:
         self.name = config.name
         self.color = config.color
 
-        config.mlp_config.input_dim = data.x.shape[1]
-        config.mlp_config.out_dim = int(data.y.max().item()) + 1
+        self.mlp_config.input_dim = data.x.shape[1]
+        self.mlp_config.out_dim = int(data.y.max().item()) + 1
 
-        self.net = mlp_factory(config.mlp_config)
+        self.net = mlp_factory(self.mlp_config)
         self.loss = tnn.CrossEntropyLoss()
         self.net.to(device=self.device)
         self.loss.to(device=self.device)
