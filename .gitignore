@@ -212,3 +212,4 @@ __marimo__/
 
 # Torch files
 *.pt
+*.DS_Store
