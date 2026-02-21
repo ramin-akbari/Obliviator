@@ -41,10 +41,12 @@ To see the available top-level commands (reproducing experiments vs. using custo
 uv run main.py --help
 ```
 
-
+```bash
+uv run main.py expr --help
+```
 
 ```bash
-uv run main.py expr --model <MODEL> --data <DATASET> --mode <sup|unsup>
+uv run main.py sup --help
 ```
 
 ### 🚀 Reproducing Experiments
