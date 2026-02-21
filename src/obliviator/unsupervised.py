@@ -58,14 +58,12 @@ class Unsupervised:
         self.device = torch.device(config.device)
         self._encoder = torch.nn.Identity()  # dummy encoder
 
-        print(median_sigma(self.x, config.sigma_min_x, alpha=1.5))
-
         self._phi_x = RandomFourierFeature(
             self.x.shape[1],
             config.rff_scale_x,
             config.drff_max,
             config.drff_min,
-            median_sigma(self.x, config.sigma_min_x, alpha=1.25),
+            median_sigma(self.x, config.sigma_min_x, alpha=config.smoother_rff_factor),
             config.resample_x,
             self.device,
         )
@@ -102,7 +100,19 @@ class Unsupervised:
             )
             self.s = phi_s(self.s, self.mm_batch)
 
-    def null_dim_reduction(self, tol: float) -> tuple[torch.Tensor, torch.Tensor]:
+    def null_dim_reduction(
+        self, tol: float, normalize: bool = True
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if normalize:
+            mu = self.x.mean(dim=0)
+            sigma = self.x.std(dim=0)
+            self.x.sub_(mu)
+            self.test_rv.sub_(mu)
+            self.x.div_(sigma)
+            self.test_rv.div_(sigma)
+
+            self._phi_x.change_params(sigma=median_sigma(self.x, self.sigma_min_x))
+
         # map input with RFF
         x = self._phi_x(self.x, self.mm_batch)
         self.test_rv = self._phi_x(self.test_rv, self.mm_batch)
@@ -320,7 +330,7 @@ class Unsupervised:
             self._encoder = mlp_factory(config)
             self._phi.change_params(d_in=config.out_dim, do_resample=False)
 
-    # equivalent to f(x) - mu_f
+    # equivalent to f(x)
     def _update_and_project(
         self, f: torch.Tensor, input_rv: torch.Tensor, normalize: bool = True
     ) -> torch.Tensor:
@@ -338,16 +348,13 @@ class Unsupervised:
                 [helper(bx) for bx in torch.split(x, self.mm_batch)], dim=0
             )
 
-        mu = input_rv.mean(dim=0)
-
         # update input
-        input_rv.sub_(mu)
         input_rv = project(x=input_rv, mat=f)
 
         # update test
-        self.test_rv.sub_(mu)
         self.test_rv = project(x=self.test_rv, mat=f)
 
+        # semantic is encoded in direction
         if normalize:
             input_rv.div_(input_rv.norm(dim=1, keepdim=True))
             self.test_rv.div_(self.test_rv.norm(dim=1, keepdim=True))
@@ -393,6 +400,7 @@ class Unsupervised:
 
     def _rff_encoder_embeddings(self, z_batch: torch.Tensor) -> torch.Tensor:
         w = self._encoder(z_batch)
+        # semantics should be encoded in direction
         w = w.div(w.norm(dim=1, keepdim=True))
         with torch.no_grad():
             sigma = median_sigma(w, self.sigma_min, alpha=self.smooth_sigma_factor)

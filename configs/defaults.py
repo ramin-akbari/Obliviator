@@ -50,12 +50,12 @@ class BaseUnsup(UnsupervisedConfig):
 
 @dataclass(slots=True)
 class LargeUnsup(BaseUnsup):
-    drff_max: int = 8192
-    drff_min: int = 2048
+    drff_max: int = 8000
+    drff_min: int = 1500
     sigma_min: float = 2.25
     sigma_min_x: float = 3.5
     sigma_min_z: float = 2
-    evp_tau_x: float = 0.15
+    evp_tau_x: float = 0.2
 
 
 @dataclass(slots=True)
@@ -66,10 +66,10 @@ class BaseSup(SupervisedConfig):
 
 @dataclass(slots=True)
 class LargeSup(BaseSup):
-    drff_max: int = 6000
+    drff_max: int = 8000
     drff_min: int = 1500
     sigma_min: float = 2.25
     sigma_min_x: float = 3.5
     sigma_min_z: float = 2
-    evp_tau_x: float = 0.15
+    evp_tau_x: float = 0.2
     evp_tau_y: float = 2

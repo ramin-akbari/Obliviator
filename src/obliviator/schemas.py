@@ -82,31 +82,31 @@ class MLPConfig:
 class UnsupervisedConfig:
     """Unsupervised Erasure Config. Erasure Process:  x->....->z->Encoder->w"""
 
-    drff_min: int = 1024
+    drff_min: int = 1000
     """min number of Random Fourier Features used to estimate HSIC and solve EVP """
-    drff_max: int = 4096
+    drff_max: int = 4000
     """max number of Random Fourier Features used to estimate HSIC and solve EVP """
 
     rff_scale: int = 5
     """Scale Factor for Random Fourier Features for Current RV [w]"""
-    rff_scale_x: int = 8
+    rff_scale_x: int = 6
     """Scale Factor for Random Fourier Features for Initial RV [x]"""
-    rff_scale_z: int = 10
+    rff_scale_z: int = 8
     """Scale Factor for Random Fourier Features for Previous RV [z]"""
 
-    sigma_min: float = 1.75
+    sigma_min: float = 1.5
     """Min value for sigma based on Median Heuristic for RV [w]"""
-    sigma_min_x: float = 2.25
+    sigma_min_x: float = 0.2
     """Min value for sigma based on Median Heuristic for RV [x]"""
     sigma_min_z: float = 1.5
     """Min value for sigma based on Median Heuristic for RV [z]"""
 
     resample_x: bool = False
-    """Resampling Random Fourier Features After each epoch [use if you use low dimension for RFF(x)]"""
+    """Resampling Random Fourier Features After each epoch [use if you use low dimension for RFF]"""
     resample_z: bool = False
-    """Resampling Random Fourier Features After each epoch [use if you use low dimension for RFF(z)]"""
+    """Resampling Random Fourier Features After each epoch [use if you use low dimension for RFF]"""
 
-    smoother_rff_factor: float = 1.5
+    smoother_rff_factor: float = 1.25
     """Make sigma [w] smoother during encoder training"""
 
     use_rff_s: bool = False
@@ -139,12 +139,6 @@ class UnsupervisedConfig:
 
 @dataclass(slots=True, kw_only=True)
 class SupervisedConfig(UnsupervisedConfig):
-    rff_scale_x: int = 5
-    """Scale Factor for Random Fourier Features for Initial RV [x]"""
-    rff_scale_z: int = 6
-    """Scale Factor for Random Fourier Features for Previous RV [z]"""
-    evp_tau_x: float = 0.2
-    """coefficient of Cov(x,w) in EVP"""
     tau_y: float = 2
     """coefficient of HSIC(y,w)"""
     evp_tau_y: float = 2
@@ -165,6 +159,7 @@ class UnsupervisedData:
     s: torch.Tensor
     x_test: torch.Tensor
 
+    # making sure data is tensor
     def __init__(
         self,
         *,
@@ -191,5 +186,6 @@ class SupervisedData(UnsupervisedData):
         y: torch.Tensor | np.ndarray,
         dtype: torch.dtype = torch.float32,
     ):
+        # since slot=True returns a new class so we need explicit call instead of super
         UnsupervisedData.__init__(self, x=x, s=s, x_test=x_test, dtype=dtype)
         self.y = torch.as_tensor(y, dtype=dtype)
