@@ -23,7 +23,7 @@ If you want to run `main.py`, modify the data loaders, or reproduce the experime
 
 - Clone the repository
 ```bash
-git clone [https://github.com/ramin-akbari/obliviator.git](https://github.com/ramin-akbari/obliviator.git)
+git clone git@github.com:ramin-akbari/Obliviator.git
 ```
 - Create a virtual environment and sync dependencies
 ```bash
