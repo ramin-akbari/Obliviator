@@ -1,3 +1,4 @@
+from copy import copy
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -49,7 +50,7 @@ class MLPCrossEntropy:
         self.y_test = data.y_test
 
         self.max_acc = 0
-        self.mlp_config = config.mlp_config
+        self.mlp_config = copy(config.mlp_config)
         self.name = config.name
         self.color = config.color
 
@@ -65,9 +66,9 @@ class MLPCrossEntropy:
 
     def train(self, epochs: int = 100) -> None:
         optim = self.optimizer(self.net.parameters())
-
-        x_buf = torch.empty_like(self.x).pin_memory()
-        y_buf = torch.empty_like(self.y).pin_memory()
+        use_pin = self.x.device == torch.device("cpu")
+        x_buf = torch.empty_like(self.x, pin_memory=use_pin)
+        y_buf = torch.empty_like(self.y, pin_memory=use_pin)
         N = self.x.shape[0] - (self.x.shape[0] % self.batch)
 
         pbar = tqdm(
@@ -76,13 +77,13 @@ class MLPCrossEntropy:
         )
 
         for _ in range(epochs):
-            idx = torch.randperm(self.x.shape[0])
+            idx = torch.randperm(self.x.shape[0], device=self.x.device)
             x_buf.copy_(self.x[idx])
             y_buf.copy_(self.y[idx])
             for i in range(0, N, self.batch):
                 x = x_buf[i : i + self.batch].to(device=self.device, non_blocking=True)
                 y = y_buf[i : i + self.batch].to(device=self.device, non_blocking=True)
-                optim.zero_grad()
+                optim.zero_grad(set_to_none=True)
                 logit = self.net(x)
                 loss = self.loss(logit, y)
                 loss.backward()

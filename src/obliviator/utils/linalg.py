@@ -105,7 +105,7 @@ def null_supervised_pca(
     for tau, rv in zip(taus, align_rvs):
         C = cov_ix(rv).mm(u_null)
         C = C.T.mm(C)
-        C.div_(fast_sym_spectral_norm(C) + 1e-7)
+        C.div_(fast_sym_spectral_norm(C))
         mat.add_(C.mul_(tau))
 
     pcs = _select_top_k_eigvec(mat, rtol, atol, display_eigs)
@@ -117,8 +117,8 @@ def fast_sym_spectral_norm(C: torch.Tensor, num_iter: int = 5) -> float:
     v = torch.randn(C.shape[1], device=C.device, dtype=C.dtype)
     for _ in range(num_iter):
         v.copy_(C.mv(v))
-        v.div_(v.norm())
-    return C.mv(v).norm().item()
+        v.div_(v.norm().clamp_min_(1e-7))
+    return C.mv(v).norm().clamp_min_(1e-7).item()
 
 
 def null_pca(

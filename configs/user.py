@@ -18,7 +18,7 @@ class UserClsOptim(oblvsc.OptimConfig):
 class UserProbUnwanted(ProbConfig):
     mlp_config: oblvsc.MLPConfig = field(default_factory=UserDeepCls)
     optim_config: oblvsc.OptimConfig = field(default_factory=UserClsOptim)
-    name: str = "Uwanted"
+    name: str = "Unwanted"
     color: oblvsc.TermColor = oblvsc.TermColor.BRIGHT_RED
 
 

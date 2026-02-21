@@ -28,17 +28,17 @@ def load_experimental_data(config: Expr) -> RawData:
 
     with url_file.open("rb") as urf:
         url = tomllib.load(urf)
-        info = url[config.data][config.model]
 
     try:
-        repo_id = info["repo_id"]
-        filename = info["filename"]
+        info = url[config.data][config.model]
     except KeyError:
         raise KeyError(
             f"Entry '{config.model} -> {config.data}' doesn't exist in the TOML config."
         )
-
     downloaded_str = hf_hub_download(
-        repo_id=repo_id, filename=filename, local_dir=local_dir, repo_type="dataset"
+        repo_id=info["repo_id"],
+        filename=info["filename"],
+        local_dir=local_dir,
+        repo_type="dataset",
     )
     return RawData(**torch.load(downloaded_str))

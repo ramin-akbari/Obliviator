@@ -79,7 +79,7 @@ def convert_to_onehot(x: np.ndarray | torch.Tensor, is_zero_indexed: bool):
         # assumes labels are scattered example: [2,3,4] => [0,1,2] or [6,3,9] => [1,0,2]
         labels = x.unique()
         label_max = len(labels)
-        new_map = torch.zeros(labels[-1] + 1, dtype=torch.long)
+        new_map = torch.zeros(labels[-1] + 1, dtype=torch.long, device=x.device)
         new_map[labels] = torch.arange(label_max)
         x = new_map[x]
     else:
