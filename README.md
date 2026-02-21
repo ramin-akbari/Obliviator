@@ -32,7 +32,7 @@ uv sync
 ```
 - you can either activate the virtual env by `source .venv/bin/activate` or use `uv run <file_name>`
 
-📖 Using the Built-in CLI Manual
+### Using the Built-in CLI Manual
 Obliviator is powered by [`tyro`](https://brentyi.github.io/tyro/), which automatically generates comprehensive documentation for all hyperparameter configurations directly in your terminal.
 
 To see the available top-level commands (reproducing experiments vs. using custom data), run:
