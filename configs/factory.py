@@ -73,7 +73,7 @@ def experiment_factory(
 
     match exp_config.mode:
         case "sup":
-            tol = Tol(dim_reduction=5e-5, evp=1e-5)
+            tol = Tol(dim_reduction=3e-5, evp=1e-5)
             match exp_config.model:
                 case "deepseek" | "llama":
                     oblv = LargeSup()

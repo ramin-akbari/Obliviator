@@ -14,7 +14,7 @@ class DeepClassifier(MLPConfig):
     use_projection: bool = True
     hidden_dim: int = 128
     n_layer: int = 4
-    activation: ActivationType = ActivationType.SILU
+    activation: ActivationType = ActivationType.GELU
 
 
 @dataclass(slots=True)
@@ -55,7 +55,7 @@ class LargeUnsup(BaseUnsup):
     sigma_min: float = 2.25
     sigma_min_x: float = 3.5
     sigma_min_z: float = 2
-    evp_tau_x: float = 0.2
+    evp_tau_x: float = 0.25
 
 
 @dataclass(slots=True)
@@ -71,5 +71,6 @@ class LargeSup(BaseSup):
     sigma_min: float = 2.25
     sigma_min_x: float = 3.5
     sigma_min_z: float = 2
-    evp_tau_x: float = 0.2
+    evp_tau_x: float = 0.25
     evp_tau_y: float = 2
+    rff_scale_y: int = 30

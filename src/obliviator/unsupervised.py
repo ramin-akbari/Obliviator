@@ -110,7 +110,8 @@ class Unsupervised:
             self.test_rv.sub_(mu)
             self.x.div_(sigma)
             self.test_rv.div_(sigma)
-
+            self.x.div_(self.x.norm(dim=1, keepdim=True))
+            self.test_rv.div_(self.test_rv.norm(dim=1, keepdim=True))
             self._phi_x.change_params(sigma=median_sigma(self.x, self.sigma_min_x))
 
         # map input with RFF
