@@ -1,9 +1,13 @@
 # single file for all experiments
 
+from typing import Callable
+
 import tyro
+from torch import Tensor
 
 from configs.process import process_args
 from configs.schemas import InputConfig
+from evaluation.probing import MLPCrossEntropy
 from obliviator.schemas import TermColor
 
 REPORT_COLOR = TermColor.BRIGHT_MAGENTA
@@ -13,12 +17,14 @@ MAX_ITER = 15
 TARGET_ACC = 0.6
 
 
-def cls_helper(unwanted_cls, utility_cls):
-    def helper_update(z, z_test):
+def cls_helper(
+    unwanted_cls: MLPCrossEntropy, utility_cls: MLPCrossEntropy
+) -> tuple[Callable[[Tensor, Tensor], None], Callable[[int], float]]:
+    def helper_update(z: Tensor, z_test: Tensor) -> None:
         unwanted_cls.update_input(x=z, x_test=z_test)
         utility_cls.update_input(x=z, x_test=z_test)
 
-    def helper_accuracy(epochs):
+    def helper_accuracy(epochs: int) -> float:
         unwanted_cls.train(epochs)
         utility_cls.train(epochs)
         return unwanted_cls.max_acc
@@ -33,7 +39,7 @@ def main():
 
     # Initial Accuracy of Unwanted and Utility
     print(f"\n{REPORT_COLOR}[Original Accuracy]{TermColor.RESET}")
-    update_accuracy(epochs=25)
+    update_accuracy(25)
 
     # Perform Dimensionality Reduction on Data
     print(
@@ -43,7 +49,7 @@ def main():
     print()
     # Accuracy after Dim reduction
     update_cls(z, z_test)
-    update_accuracy(epochs=MAX_EPOCHS)
+    update_accuracy(MAX_EPOCHS)
 
     print(f"\n{REPORT_COLOR}[Starting Iterative Erasure]{TermColor.RESET}\n")
     print(f"{REPORT_COLOR}[Iteration 1]{TermColor.RESET}")
@@ -52,7 +58,7 @@ def main():
     z, z_test = eraser.init_erasure(epochs=ENCODER_EPOCH, tol=tol.evp)
     print()
     update_cls(z, z_test)
-    unwanted_acc = update_accuracy(epochs=MAX_EPOCHS)
+    unwanted_acc = update_accuracy(MAX_EPOCHS)
     it = 1
 
     # Iterative Erasure
@@ -62,7 +68,7 @@ def main():
         z, z_test = eraser.erasure_step(z=z, epochs=ENCODER_EPOCH, tol=tol.evp)
         print()
         update_cls(z, z_test)
-        update_accuracy(epochs=MAX_EPOCHS)
+        update_accuracy(MAX_EPOCHS)
 
 
 if __name__ == "__main__":
