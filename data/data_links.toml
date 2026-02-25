@@ -3,3 +3,8 @@ deepseek = { repo_id = "ramin-akbari/Obliviator_Datasets", filename = "deepseek_
 llama = { repo_id = "ramin-akbari/Obliviator_Datasets", filename = "llama_bios.pt" }
 gpt2 = { repo_id = "ramin-akbari/Obliviator_Datasets", filename = "gpt2_bios.pt" }
 bert = { repo_id = "ramin-akbari/Obliviator_Datasets", filename = "bert_bios.pt" }
+[dial-sen]
+deepseek = { repo_id = "ramin-akbari/Obliviator_Datasets", filename = "deepseek_dial-sen.pt" }
+bert = { repo_id = "ramin-akbari/Obliviator_Datasets", filename = "bert_dial-sen.pt" }
+[dial-men]
+bert = { repo_id = "ramin-akbari/Obliviator_Datasets", filename = "bert_dial-men.pt" }

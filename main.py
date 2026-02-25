@@ -65,7 +65,9 @@ def main():
     while unwanted_acc > TARGET_ACC and it < MAX_ITER:
         it += 1
         print(f"\n{REPORT_COLOR}[Iteration {it}]{TermColor.RESET}")
-        z, z_test = eraser.erasure_step(z=z, epochs=ENCODER_EPOCH, tol=tol.evp)
+        z, z_test = eraser.erasure_step(
+            z=z, epochs=ENCODER_EPOCH, tol=tol.evp, update_x=it == 2
+        )
         print()
         update_cls(z, z_test)
         update_accuracy(MAX_EPOCHS)

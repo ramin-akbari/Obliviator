@@ -81,7 +81,7 @@ def experiment_factory(
                     oblv = BaseSup()
 
         case "unsup":
-            tol = Tol(dim_reduction=5e-4, evp=1e-4)
+            tol = Tol(dim_reduction=1e-3, evp=5e-5)
             match exp_config.model:
                 case "deepseek" | "llama":
                     oblv = LargeUnsup()
